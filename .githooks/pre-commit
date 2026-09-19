@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Pre-commit guard for the Ringing Census repo.
+#
+# Install once, per clone:
+#   git config core.hooksPath .githooks
+#
+# Purpose: make it mechanically hard to commit (a) large files, (b) anything
+# that looks like survey response data, (c) anything under data/ that is not
+# curated reference material. Git history is effectively permanent and a single
+# accidental commit of respondent data is a reportable personal data breach.
+
+set -euo pipefail
+
+MAX_BYTES=1048576   # 1 MiB
+fail=0
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+
+  # --- size -----------------------------------------------------------------
+  bytes=$(wc -c < "$f" | tr -d ' ')
+  if [ "$bytes" -gt "$MAX_BYTES" ]; then
+    echo "BLOCKED  $f  (${bytes} bytes > ${MAX_BYTES})"
+    echo "         Large files belong in data/ (untracked), not in git."
+    fail=1
+  fi
+
+  # --- data/ outside reference/ ---------------------------------------------
+  case "$f" in
+    data/reference/*) : ;;
+    data/*)
+      echo "BLOCKED  $f"
+      echo "         Only data/reference/ is committed. Raw, interim and"
+      echo "         curated data are build artefacts, rebuilt from scripts."
+      fail=1
+      ;;
+  esac
+
+  # --- personal-data smells in text files -----------------------------------
+  if file --mime-type -b "$f" | grep -q '^text/'; then
+    if grep -qiE '^[^#]*\b(email|e_mail|postcode|post_code|surname|forename|date_of_birth|dob|phone|mobile|respondent_name|full_name)\b[[:space:]]*[,:=]' "$f"; then
+      echo "WARNING  $f contains a personal-data-shaped column or key."
+      echo "         If this is a schema definition, fine. If it is data, stop."
+      echo "         Override with: git commit --no-verify"
+      fail=1
+    fi
+  fi
+done <<< "$staged"
+
+if [ "$fail" -ne 0 ]; then
+  echo ""
+  echo "Commit blocked by .githooks/pre-commit."
+  exit 1
+fi
+
+exit 0

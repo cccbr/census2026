@@ -1,0 +1,22 @@
+# Quarto sub-project: per-association reports.
+#
+# Rendered in a loop, once per association, via scripts/9x_render_reports.R.
+# freeze is OFF here: a parameterised render must not serve a cached result
+# from a different association's parameters.
+
+project:
+  type: default
+  output-dir: _output
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    embed-resources: true   # single self-contained file, safe to email
+  pdf:
+    documentclass: scrartcl
+
+execute:
+  freeze: false
+  echo: false
+  warning: false

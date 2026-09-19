@@ -1,0 +1,56 @@
+# Data ------------------------------------------------------------------------
+# Nothing under data/ is committed EXCEPT data/reference/, which holds small,
+# hand-curated lookups that are part of the method and must be reviewable.
+#
+# This is enforced mechanically because discipline fails at 11pm and git
+# history is forever.
+
+data/raw/*
+data/interim/*
+data/curated/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/curated/.gitkeep
+
+# Never, under any circumstances --------------------------------------------
+*.duckdb
+*.duckdb.wal
+*.sqlite
+*.Rdata
+*.RData
+*.rds
+*.parquet
+*.feather
+
+# Survey exports — belt and braces. These must never approach this repo.
+*response*.csv
+*responses*.csv
+*questionpro*.csv
+*_pii*
+*_personal*
+
+# R ---------------------------------------------------------------------------
+.Rproj.user/
+.Rhistory
+.Ruserdata
+.Rapp.history
+.RData
+renv/library/
+renv/staging/
+renv/python/
+renv/sandbox/
+
+# Quarto ----------------------------------------------------------------------
+/.quarto/
+*_files/
+*_cache/
+/_site/
+/_book/
+reports/_output/
+
+# OS / editor -----------------------------------------------------------------
+.DS_Store
+Thumbs.db
+*~
+.vscode/
+.positron/

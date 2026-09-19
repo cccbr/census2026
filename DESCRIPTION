@@ -1,0 +1,23 @@
+Package: ringingcensus2026
+Title: Analysis Code for the 2026 Ringing Census
+Version: 0.0.0.9000
+Description: Not a package. This DESCRIPTION exists so that renv and the IDE
+    resolve dependencies sensibly. Code is run from scripts/ and compiled with
+    Quarto from analysis/ and reports/.
+Encoding: UTF-8
+Imports:
+    arrow,
+    digest,
+    dplyr,
+    fs,
+    here,
+    httr2,
+    jsonlite,
+    knitr,
+    purrr,
+    readr,
+    rlang,
+    stringi,
+    stringr,
+    tibble,
+    tidyverse

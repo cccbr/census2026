@@ -1,0 +1,29 @@
+# Quarto sub-project: the analytical narrative.
+#
+# Deliberately NOT at the repo root. A root _quarto.yml would make the whole
+# repository one Quarto project, pull README.md into the render, and force
+# analysis/ and reports/ to share output config — which they should not, since
+# one produces a site for the team and the other produces N parameterised
+# documents for associations.
+
+project:
+  type: book
+  output-dir: _output
+
+book:
+  title: "Ringing Census 2026 — Analysis"
+  author: "CCCBR Ringing Census team"
+  chapters:
+    - index.qmd
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    df-print: paged
+
+execute:
+  freeze: auto      # cached renders; keeps `quarto render` honest and fast
+  warning: true
+  echo: true

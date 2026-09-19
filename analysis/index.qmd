@@ -1,0 +1,11 @@
+---
+title: "Ringing Census 2026 — Analysis"
+---
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("scripts", "00_setup.R"))
+```
+
+Placeholder. The analytical narrative builds here once the frame is fixed.
