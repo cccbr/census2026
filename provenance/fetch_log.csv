@@ -1,0 +1,4 @@
+snapshot_id,source,file,url,fetched_at_utc,http_status,etag,last_modified,bytes,n_rows,sha256,fetched_by
+dove_2026-09-19,dove,dove.csv,https://dove.cccbr.org.uk/dove.csv,2026-09-19T16:08:43Z,200,NA,"Sat, 19 Sep 2026 16:08:37 GMT",2378822,7262,9883b25c1b201aaf6d4da7c4f3d279c1a7e92347ec729c52b39e6c5ea475bf2c,mark
+dove_2026-09-19,dove,towers.csv,https://dove.cccbr.org.uk/towers.csv,2026-09-19T16:09:02Z,200,NA,"Sat, 19 Sep 2026 16:08:43 GMT",4213785,15720,6677060b1b691eaf902c0280604e51897113a56775c8c1be3096d79363907072,mark
+dove_2026-09-19,dove,regions.csv,https://dove.cccbr.org.uk/regions.csv,2026-09-19T16:09:03Z,200,NA,NA,52581,1131,484f5dc30a19258b0c89ea99e975ea6d4e76dc76ceee359fbff2310ac987f622,mark
