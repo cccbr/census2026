@@ -2,9 +2,15 @@
 // DOVE TOWER AUTOCOMPLETE — QuestionPro Pre JavaScript Logic
 // Version 3.0 — 2026-09-19
 //
-// TEMPLATE. The __TOWER_DATA__ placeholder below is filled by
+// TEMPLATE — the data placeholder below is filled by
 // scripts/05_export_questionnaire_towers.R. Do not paste this file into
 // QuestionPro; paste the generated file from inst/questionnaire/build/.
+//
+// The placeholder token appears exactly ONCE in this file, on the `var DATA`
+// line. Never write it in a comment: the generator substitutes the FIRST
+// occurrence, so a token in a comment silently swallows the entire payload
+// into a `//` line and leaves the real assignment as a syntax error. The
+// export script now refuses to run unless there is exactly one.
 //
 // Changes from v2 + teardown patch — critical fixes only. Everything else is
 // in inst/questionnaire/todo.md, to be worked through one step at a time.

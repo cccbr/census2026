@@ -63,7 +63,20 @@ payload <- paste0(
 template_path <- here::here("inst", "questionnaire", "tower_autocomplete_v3.js")
 template <- readr::read_file(template_path)
 
-stopifnot(grepl("__TOWER_DATA__", template, fixed = TRUE))
+# The placeholder must appear EXACTLY ONCE.
+#
+# `sub()` replaces the first occurrence. An early draft of the template also
+# named the token in its header comment, so the entire 304KB payload was
+# substituted into a `//` line and the real `var DATA = ` assignment was left
+# as a literal syntax error. The file was the right size and completely
+# non-functional — which is the worst kind of wrong, because the size test
+# still passed.
+hits <- gregexpr("__TOWER_DATA__", template, fixed = TRUE)[[1]]
+n_marks <- if (hits[1] == -1L) 0L else length(hits)
+if (n_marks != 1L) {
+  stop("Template must contain exactly one data placeholder; found ", n_marks,
+       ". Check for a second occurrence in a comment.", call. = FALSE)
+}
 
 # toJSON with auto_unbox gives a correctly escaped JavaScript string literal,
 # quotes included. Do not hand-roll this: a stray backslash or quote in a
@@ -72,6 +85,12 @@ stopifnot(grepl("__TOWER_DATA__", template, fixed = TRUE))
 payload_literal <- as.character(jsonlite::toJSON(payload, auto_unbox = TRUE))
 
 script <- sub("__TOWER_DATA__", payload_literal, template, fixed = TRUE)
+
+# Verify the substitution landed where it was meant to. Cheap, and it is the
+# difference between shipping a working script and shipping a syntax error of
+# exactly the right file size.
+stopifnot(!grepl("__TOWER_DATA__", script, fixed = TRUE))
+stopifnot(grepl('var DATA = "', script, fixed = TRUE))
 
 # ---- write ------------------------------------------------------------------
 

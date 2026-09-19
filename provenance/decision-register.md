@@ -52,7 +52,7 @@ evidence that the 1988 rule has been correctly reconstructed.
 **Display strings are unique across the picklist — zero collisions.** Better
 than the two predicted: the Farnham pair that bell count could not separate
 (a ring of ten and a 30lb mini ten) is resolved because D-003 removes the mini
-ten. Generated payload is 304KB; full script 322KB.
+ten. Generated payload is 304KB; full script 323KB.
 
 ---
 
