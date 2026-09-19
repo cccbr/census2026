@@ -30,7 +30,8 @@ while IFS= read -r f; do
 
   # --- data/ outside reference/ ---------------------------------------------
   case "$f" in
-    data/reference/*) : ;;
+    data/reference/*)  : ;;   # curated lookups: part of the method
+    data/*/.gitkeep)   : ;;   # directory placeholders: empty by definition
     data/*)
       echo "BLOCKED  $f"
       echo "         Only data/reference/ is committed. Raw, interim and"
