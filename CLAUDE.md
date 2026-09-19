@@ -178,19 +178,47 @@ Sessions should run through this with Mark rather than assuming he has.
 
 ---
 
-## Decision log
+## Decision log and register
 
-`provenance/decisions.md`, append-only. One entry per methodological decision:
-date, the decision, the alternatives considered, the reason, who decided.
+Two files, doing different jobs:
 
-This exists because the question actually asked in 2027 will not be "what did
-you do?" — the code answers that — but "why that way, and did you consider X?"
-A decision that cannot be reconstructed is a decision that cannot be defended.
+- **`provenance/decisions.md`** — append-only history. One entry per
+  analytical or data-structure decision: ID, date, status, the decision, the
+  alternatives, the reasoning, the evidence. Entries are never edited or
+  deleted; a decision that changes gets a new entry and the old one is marked
+  `Superseded` with a pointer.
+- **`provenance/decision-register.md`** — current state at a glance, plus
+  everything still **open**. Maintained by hand.
+
+### Status vocabulary — use it precisely
+
+| Status | Meaning |
+| --- | --- |
+| **Provisional** | Mark's working decision, taken to allow progress. Not agreed by the project team. Expected to be revisited |
+| **Agreed** | Ratified by the project team; the entry names who and when |
+| **Open** | Identified, not decided |
+| **Superseded** | Replaced by a named later entry |
+
+**Never record a Provisional decision as Agreed**, and never let one reach a
+published output silently. Before publication it is either escalated to
+`Agreed` or the output itself states that the choice was provisional and what
+the alternatives were. Provisional decisions quietly hardening into permanent
+ones is the failure this structure exists to prevent.
+
+### Citing decisions in code
+
+Each decision has an ID. Cite it where the decision is encoded:
+
+```r
+filter(ring_type == "Full-circle ring")   # D-003
+```
+
+That is what makes the log useful rather than decorative — the code says
+*what*, the ID leads to *why*.
 
 **Prompt Mark to add an entry whenever a choice made in conversation is about
-to be encoded in code.** Do not write entries on his behalf without asking:
-the reasoning has to be his, in his words, because he is the one who will be
-asked about it.
+to be encoded in code.** Draft the entry if he asks, but the reasoning must be
+his and he confirms the status: he is the one who will be asked about it.
 
 ---
 
@@ -259,36 +287,38 @@ Onward disclosure to associations is itself processing the DPIA must cover.
 
 ---
 
-## Decided
+## Decisions — read the register, don't rely on this file
 
-- Frame source is `dove.csv` (full-circle rings), not `towers.csv`.
-- Questionnaire picklist = the frame exactly, plus an explicit "my tower isn't
-  listed" free-text escape. Picklist and frame do not diverge; the escapes
-  become an auditable reconciliation task.
-- The survey captures the **Dove ID**, not a tower name string. Names are
-  neither stable nor unique.
-- Association reporting is parameterised Quarto, one report per association,
-  delivered to a named officer. Not an authenticated Shiny app — ~65
-  associations of authentication is hosting cost plus an indefinite DP
-  surface. Shiny is for the analysis team's internal exploration only.
-- Society name → Dove affiliation code mapping is a **committed, hand-checked
-  crosswalk** in `data/reference/`. Fuzzy matching may propose; a human
-  disposes. No mapping enters because a string distance was below a threshold.
+**`provenance/decision-register.md` is the single source of truth for what has
+been decided and what is open.** It is not duplicated here, deliberately: two
+lists of decisions drift apart, and the stale one gets believed.
+
+Read it at the start of any session that will touch the frame, the
+questionnaire, the crosswalk or any published figure.
+
+Two things worth knowing without looking:
+
+- **As of 2026-09-19, nothing is `Agreed`.** Every frame decision is one
+  person's provisional working call.
+- The frame key is **`RingID`**, not `DoveID` (D-007). An earlier version of
+  this file said Dove ID; that was wrong — `DoveID` is blank for 118 rings and
+  `TowerID` is not unique.
+
+If code needs a decision the register lists as **Open**, ask. Do not pick a
+default and bury it in a filter.
+
+### Repository conventions, which are not decisions
+
+These live here because they are tooling, not method:
+
 - `renv` runs in **implicit mode**. `renv.lock` is authoritative;
   DESCRIPTION's `Imports:` is a hint for humans and may drift.
-
-## Not decided — do not assume a default
-
-- **Frame inclusion rules**: minimum bell count, treatment of unringable
-  towers, geographic boundary of "Britain and beyond".
-- **Branch / district source**: this attribute does not exist in Dove. Either
-  associations supply a branch→tower lookup, or it is collected in the
-  survey. Collecting it as free text from tower representatives will produce
-  forty spellings of each district.
-- The ShareAlike question above.
-
-If code needs one of these, ask. Do not pick a default and bury it in a
-filter.
+- Society name → Dove affiliation mapping is a **committed, hand-checked
+  crosswalk** in `data/reference/`. Fuzzy matching may propose; a human
+  disposes. No mapping enters because a string distance was below a threshold.
+- Association reporting is parameterised Quarto, one report per association,
+  delivered to a named officer — not an authenticated Shiny app. Shiny is for
+  the analysis team's internal exploration only.
 
 ---
 
@@ -334,9 +364,11 @@ Outstanding, roughly in order:
 4. Install the pre-commit hook: `git config core.hooksPath .githooks`.
 5. Set `git config user.email` before the first commit — every commit carries
    it in perpetuity and the repo is destined for a CCCBR org.
-6. `provenance/decisions.md` does not exist yet.
-7. `scripts/01_fetch_dove.R` has not been run; `provenance/fetch_log.csv` does
-   not exist yet.
-8. Scripts 03–05 (society crosswalk, frame build, questionnaire export) are
-   not written. They are blocked on the schema note from
-   `scripts/02_profile_dove.R` and on the frame inclusion rules above.
+6. `scripts/03–05` (society crosswalk, frame build, questionnaire export) are
+   not written. Blocked on D-004 and D-010 in the register.
+7. The QuestionPro autocomplete widget has no documentation in this repo and
+   the source is not held here.
+
+Done since: Dove snapshot `dove_2026-09-19` fetched and logged (7,262 /
+15,720 / 1,131 rows); society membership table and its metadata in
+`data/reference/`; decision log and register established.
