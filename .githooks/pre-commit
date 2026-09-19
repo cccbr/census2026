@@ -40,13 +40,26 @@ while IFS= read -r f; do
       ;;
   esac
 
-  # --- personal-data smells in text files -----------------------------------
+
+  # --- personal-data smells -------------------------------------------------
+  # Blocking only for data-shaped files. A source file naming a column is a
+  # schema definition, not data — `postcode = na_if(Postcode, "")` in an R
+  # script is correct code. Those warn; they do not block.
+  case "$f" in
+    *.csv|*.tsv|*.psv|*.json|*.jsonl|*.txt|*.dat) data_like=1 ;;
+    *) data_like=0 ;;
+  esac
+
   if file --mime-type -b "$f" | grep -q '^text/'; then
-    if grep -qiE '^[^#]*\b(email|e_mail|postcode|post_code|surname|forename|date_of_birth|dob|phone|mobile|respondent_name|full_name)\b[[:space:]]*[,:=]' "$f"; then
-      echo "WARNING  $f contains a personal-data-shaped column or key."
-      echo "         If this is a schema definition, fine. If it is data, stop."
-      echo "         Override with: git commit --no-verify"
-      fail=1
+    if grep -qiE '\b(email|e_mail|postcode|post_code|surname|forename|date_of_birth|dob|phone|mobile|respondent_name|full_name)\b[[:space:]]*[,:=]' "$f"; then
+      if [ "$data_like" -eq 1 ]; then
+        echo "BLOCKED  $f — personal-data-shaped column in a data file."
+        echo "         Data does not belong in this repository."
+        fail=1
+      else
+        echo "NOTE     $f names a personal-data-shaped field. Treated as a"
+        echo "         schema definition — check it is not literal data."
+      fi
     fi
   fi
 done <<< "$staged"

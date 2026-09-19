@@ -251,3 +251,66 @@ structural check (society counts, reps, vacancies) reconciles exactly. See the
 accompanying `.md` for the three candidate explanations. **This must be
 settled with whoever compiles the Council's return before the figures are used
 as a denominator or comparator.**
+
+---
+
+## D-012 — Picklist entries are one per ring, not one per tower
+
+**2026-09-19 · Provisional (Mark)**
+
+The questionnaire picklist carries one entry per `RingID`. The 13 towers
+holding two rings therefore appear twice.
+
+**Reasoning:** `RingID` is the key (D-007), and bell count in the display
+string distinguishes the pairs. Deciding the 13 properly requires case-by-case
+judgement — Gresford's eight and six are one band; South Stoneham's parish
+three and the Southampton University campanile are almost certainly not — and
+that judgement should not block the payload.
+
+**Supersedes nothing. Leaves D-010 open.**
+
+**Finding:** with lightweight rings excluded (D-003), the picklist has **zero**
+colliding display strings — better than the two predicted. The Farnham pair
+that could not be separated by bell count (a ring of ten and a 30lb mini ten,
+both showing as 10) is resolved because the mini ten is a lightweight ring and
+D-003 removes it. One exclusion rule quietly solved a display-uniqueness
+problem.
+
+---
+
+## D-013 — The questionnaire captures a composite `Display [RingID]` string
+
+**2026-09-19 · Provisional (Mark)**
+
+The widget writes `"<display> [<RingID>]"` into a single QuestionPro text
+field, rather than a bare RingID or a separate hidden field.
+
+**Reasoning:** it needs no QuestionPro-side change and is what already works,
+which matters while the widget itself is being stabilised. Debugging inside
+QuestionPro is slow and gives poor error feedback, so moving parts are added
+one at a time.
+
+**Known cost, accepted for now:** the value is brittle — any dedication
+containing square brackets breaks parsing — and it couples the analysis key to
+the display format, so changing a label silently changes the data. The
+production answer is a hidden RingID field; that is step 8 in
+`inst/questionnaire/todo.md`.
+
+**This must not survive to fieldwork unexamined.** See Q-010.
+
+---
+
+## D-014 — QuestionPro Research tier is funded and locked in
+
+**2026-09-19 · Agreed (CCCBR)**
+
+JavaScript Logic requires Team or Research edition; the Non-Profit Waiver maps
+to Advanced, which does not have it. The CCCBR has approved official purchase
+of Research tier and funding was approved at full price, so the dependency is
+resolved rather than merely noted.
+
+**Residual note:** the quoted price is believed to be lower than it should be
+owing to a misunderstanding on the vendor's side. Funding exists for the full
+price, so a corrected invoice is not a risk to the project — but a licence
+that lapses mid-fieldwork would silently break the tower question, so the
+renewal date is worth knowing.

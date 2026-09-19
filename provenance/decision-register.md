@@ -4,7 +4,7 @@ Current state, at a glance. The reasoning lives in `decisions.md`, which is
 append-only; this file is maintained by hand and shows where things stand
 now.
 
-**Last reviewed: 2026-09-19**
+**Last reviewed: 2026-09-19 (evening)**
 
 Statuses: **Provisional** (Mark's working decision, not team-agreed) ·
 **Agreed** (ratified by the project team) · **Open** (not decided) ·
@@ -25,9 +25,12 @@ Statuses: **Provisional** (Mark's working decision, not team-agreed) ·
 | D-008 | Picklist = frame exactly, plus a free-text "not listed" escape | Provisional | — |
 | D-009 | Dove's dedication abbreviations shown verbatim, not expanded | Provisional | — |
 | D-011 | Society membership recorded as published, uncorrected | Provisional | — |
+| D-012 | Picklist is one entry per ring, not per tower; the 13 two-ring towers appear twice | Provisional | — |
+| D-013 | Questionnaire captures composite `Display [RingID]` in one field | Provisional | — |
+| D-014 | QuestionPro Research tier funded and purchased | **Agreed** | CCCBR |
 
-**Nothing in this register is yet Agreed.** Every frame decision is currently
-one person's working call.
+**D-014 is the only Agreed entry.** Every frame decision is still one person's
+working call.
 
 ## Current frame counts
 
@@ -37,7 +40,7 @@ On the `dove_2026-09-19` snapshot:
 | --- | --- |
 | All rows in `dove.csv` | 7,262 |
 | Ringable | 6,297 |
-| Ringable + full-circle — **`frame_full`** | **6,161** |
+| Ringable + full-circle — **`frame_full`** = **`frame_picklist`** | **6,161** |
 | …of which ≥4 bells | 5,775 |
 | …of which ≥5 bells | 5,619 |
 | …of which British Isles | 6,013 |
@@ -46,6 +49,11 @@ On the `dove_2026-09-19` snapshot:
 1988's own frame was 5,425 towers. The 0.9% gap is the best available
 evidence that the 1988 rule has been correctly reconstructed.
 
+**Display strings are unique across the picklist — zero collisions.** Better
+than the two predicted: the Farnham pair that bell count could not separate
+(a ring of ten and a 30lb mini ten) is resolved because D-003 removes the mini
+ten. Generated payload is 304KB; full script 322KB.
+
 ---
 
 ## Open — needed before the questionnaire ships
@@ -53,9 +61,12 @@ evidence that the 1988 rule has been correctly reconstructed.
 | ID | Question | Blocks | Notes |
 | --- | --- | --- | --- |
 | D-004 | Minimum bell count for `frame_full` | Frame build, picklist | 1988 used ≥5. Mark inclined to include 4s. 386 threes, 156 fours. D-006 makes this less binding than it looks |
-| D-010 | Ring or tower as the respondent's unit; the 13 two-ring towers | Picklist | To be decided by hand, 13 rows |
-| Q-001 | Dove attribution wording placed in the QuestionPro about/privacy text | Questionnaire build | CC BY-SA 4.0 requires it; wording is in `scripts/00_setup.R` |
-| Q-002 | The three outstanding QuestionPro widget validation tests | Questionnaire build | Value capture in response data; mobile; full-payload acceptance |
+| D-010 | Ring or tower as the respondent's unit; the 13 two-ring towers | Analysis, deduplication | D-012 defers it for the picklist; it still has to be answered for analysis |
+| Q-001 | Dove CC BY-SA attribution placed in the QuestionPro about/privacy text | Questionnaire build | Wording is `DOVE_ATTRIBUTION` in `scripts/00_setup.R` |
+| Q-002 | Widget validation tests — **four, not three** | Questionnaire build | Value capture verified from submitted response data; mobile on real devices; full-payload acceptance; back-navigation |
+| Q-011 | Does QuestionPro re-run Pre JavaScript Logic on back-navigation? | Widget design | If not, careful respondents who go back get an uncontrolled free-text field. Step 4 in `inst/questionnaire/todo.md` |
+| Q-012 | **Date by which the widget-vs-fallback decision must be made** | Everything downstream | Cascading county questions are ~60 lookup questions plus branching. Reverting close to fieldwork would be expensive. **Not yet set — Mark to word this** |
+| Q-013 | Ship without keyboard navigation and screen-reader support, or not? | Questionnaire build | A scope decision, not a technical one. Steps 6–7 in the todo list. Respondent population skews older |
 
 ## Open — needed before analysis
 
@@ -65,7 +76,7 @@ evidence that the 1988 rule has been correctly reconstructed.
 | Q-003 | The 1,827 discrepancy in the 2025 membership total | Any use of society figures as denominator | Needs the Council's membership compiler |
 | Q-004 | Whether unringable towers are reported on separately | Reporting scope | 1988 did report on them; D-002 excludes them from the frame, which is not the same thing |
 | Q-005 | Source of branch / district attribution | Association reporting | Not in Dove. Associations supply a lookup, or it is collected in the survey |
-| Q-006 | Territorial society assignment rule for towers with multiple or no affiliations | Association reporting | 169 rings carry 2+ affiliations (semicolon-delimited); **1,057 carry none** |
+| Q-006 | Territorial society assignment rule for towers with multiple or no affiliations | Association reporting, script 03 | 169 rings carry 2+ affiliations (semicolon-delimited); **1,057 carry none** |
 | Q-007 | Minimum cell size and suppression rules | Association reports | Must be settled in the data layer, not the report layer |
 
 ## Open — governance and legal
@@ -74,7 +85,7 @@ evidence that the 1988 rule has been correctly reconstructed.
 | --- | --- | --- | --- |
 | Q-008 | Whether published census outputs are "adapted material" under CC BY-SA 4.0 §4 | Publication | Sui generis database rights. For legal/DP sign-off |
 | Q-009 | Independent data protection professional sign-off | Publication, enumerator deployment | Noted as pending |
-| Q-010 | Which Provisional decisions must be escalated to Agreed before publication | Publication | Currently that is all of them |
+| Q-010 | Which Provisional decisions must be escalated to Agreed before publication | Publication | Currently all but D-014. D-013 in particular must not survive to fieldwork unexamined |
 
 ---
 

@@ -54,3 +54,8 @@ Thumbs.db
 *~
 .vscode/
 .positron/
+
+# Generated questionnaire payload ---------------------------------------------
+# 300KB+ of generated data, rebuilt by scripts/05_export_questionnaire_towers.R
+# from the template and the curated frame. The template IS committed.
+inst/questionnaire/build/
