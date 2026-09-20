@@ -1,3 +1,6 @@
+// *** SUPERSEDED by tower_autocomplete_v4.js (D-015). Retained only as the
+// *** record of the embedded-payload approach, which cannot work: QuestionPro
+// *** caps JS Logic at 16k-32k characters. DO NOT DEPLOY THIS FILE.
 // =============================================================================
 // DOVE TOWER AUTOCOMPLETE — QuestionPro Pre JavaScript Logic
 // Version 3.0 — 2026-09-19

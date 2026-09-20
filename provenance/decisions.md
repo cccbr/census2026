@@ -314,3 +314,101 @@ owing to a misunderstanding on the vendor's side. Funding exists for the full
 price, so a corrected invoice is not a risk to the project — but a licence
 that lapses mid-fieldwork would silently break the tower question, so the
 renewal date is worth knowing.
+
+---
+
+## D-015 — The tower list is fetched from an external host, not embedded
+
+**2026-09-19 · Provisional (Mark) · proven working end to end**
+
+The questionnaire fetches the tower list from a URL at runtime. It is not
+embedded in the survey.
+
+**Why there was no alternative.** QuestionPro's limits were established
+empirically, by pasting padded scripts of known size:
+
+| Field | Limit |
+| --- | --- |
+| JavaScript Logic | between 16,384 and 32,768 characters (16k passed, 32k failed) |
+| Rich-text content block | 10,000 characters, counting injected markup |
+
+The frame is 6,161 rings. Encodings measured against it: plain `id|display|alt`
+304 KB; dictionary-encoding dedication and county 166 KB; adding prefix-coding
+of the sorted place column 144 KB; gzip+base64 88 KB. Against a payload budget
+of roughly 19 KB after template overhead, the smallest of these is still seven
+times too large. **No encoding closes that gap**, and the exercise is what
+established it rather than assuming it.
+
+A request to raise the platform limit was made and refused.
+
+Chunking across ten hidden content blocks was prototyped and verified working
+(reassembly by regex, gunzip, checksum match). It was rejected: ten pastes
+repeated on every data refresh, six failure points, and debuggable by nobody
+except the two people who built it.
+
+**Proven, not assumed.** Two probes run in QuestionPro preview established
+that outbound requests are permitted: `fetch` returned HTTP 200 in 61 ms with
+no CSP violation, and a `<script>` tag loaded in 63 ms. The full widget was
+then tested end to end against a file on `raw.githubusercontent.com` — 6,161
+rings indexed, and "St Mary Amersham" correctly matched "Amersham, S Mary V
+(12) — Buckinghamshire".
+
+**Accepted risk.** The questionnaire now depends on a network fetch during the
+reference week. A respondent behind a restrictive proxy, or on a poor
+connection, will not get the picker.
+
+**Mitigations, all implemented:** an 8-second timeout; `localStorage` caching
+keyed by snapshot, so a returning or back-navigating respondent does not
+refetch; and a degraded path that restores a plain text box with instructions
+("type your tower's place name and dedication") rather than leaving a dead
+question. Degraded responses are separable at analysis time and join the
+free-text reconciliation task.
+
+**Open:** where it is hosted. `raw.githubusercontent.com` is the test host and
+is not suitable for fieldwork — GitHub rate-limits it and does not support it
+as a hosting endpoint. Production candidates are CCCBR's own infrastructure
+(politically correct, they already run Dove) or jsDelivr pinned to a git tag
+(immutable URL, proper CDN). See Q-014.
+
+---
+
+## D-016 — The tower list is served as plain text, not as JavaScript
+
+**2026-09-19 · Provisional (Mark)**
+
+The hosted file is `towers_<snapshot_id>.txt`, fetched with `fetch()` and
+parsed as data.
+
+**Reasoning — this is a security decision, not a stylistic one.** The first
+implementation served a `.js` file assigning a global, loaded by a `<script>`
+tag. That requires no CORS headers from the host, which is operationally
+convenient. It also means the questionnaire **executes remote code in the
+respondent's browser**: if the host were ever compromised, arbitrary
+JavaScript would run on a page collecting census responses. Fetched as data,
+the worst case is bad data, which the header counts catch.
+
+Host convenience is not worth that trade for a project with a DPIA in flight.
+
+**Secondary benefits:** the file is readable with `curl`, greppable, and
+usable by anything that is not this widget — an association officer checking
+their towers are listed, or Bryn working in Python. A JSON blob or a `.js`
+assignment would be none of those things, and the provenance chain is about
+data.
+
+**Cost:** `fetch` requires `Access-Control-Allow-Origin` from the host, which
+a script tag would not have. `raw.githubusercontent.com` and jsDelivr both
+send it. Self-hosting on CCCBR infrastructure needs one line of server
+configuration — which must be confirmed before it is promised, not discovered
+during fieldwork.
+
+**Format.** First line `# <snapshot_id> <n_rings> <n_chars>`, then one row per
+ring as `RingID|display|alt names`.
+
+Integrity is carried as counts rather than a checksum. Counts catch the
+realistic failures — truncation and a partial cache write. Corruption in
+transit is prevented by HTTPS; the wrong file is caught by the snapshot id;
+and a hash cannot detect tampering, because whoever can alter the file can
+alter the header. A 32-bit hash would also have to be reimplemented
+identically in R, which has no native unsigned 32-bit arithmetic — exactly the
+silent cross-language divergence already being managed with the search-key
+normaliser.
