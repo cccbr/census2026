@@ -16,6 +16,7 @@ for decisions that affect what the numbers mean.
 | --- | --- |
 | **Provisional** | A working decision taken by Mark to allow progress. Not agreed by the project team. Reversible, and expected to be revisited. |
 | **Agreed** | Ratified by the project team. The entry names who agreed and when. |
+| **Agreed in principle** | Endorsed by the team with named details still to settle. Treated as Agreed for design work; not for publication until the details are settled. |
 | **Open** | Identified as needing a decision. Not decided. |
 | **Superseded** | Replaced by a later entry, which is named. |
 
@@ -82,7 +83,7 @@ population estimate is not settled here — see `Q-004` in the register.
 
 ## D-003 — Lightweight rings are excluded from the frame
 
-**2026-09-19 · Provisional (Mark)**
+**2026-09-19 · Provisional (Mark) → Agreed for the frame 2026-09-20 (committee) · picker inclusion: see D-018**
 
 `RingType == "Lightweight ring"` is excluded. 138 rows, of which 136 ringable.
 
@@ -110,7 +111,7 @@ reading.
 
 ## D-004 — Minimum bell count
 
-**2026-09-19 · OPEN**
+**2026-09-19 · OPEN → Superseded by D-017**
 
 Not decided. Mark is inclined to include rings of four, on the grounds that
 plain hunt on four is real ringing.
@@ -135,7 +136,7 @@ carry both — see `D-006`.
 
 ## D-005 — Geographic scope
 
-**2026-09-19 · Provisional (Mark)**
+**2026-09-19 · Provisional (Mark) → Superseded by D-019**
 
 International rings are retained in the frame. 148 ringable full-circle rings
 lie outside the British Isles, of which 114 are in Australia or the USA.
@@ -197,7 +198,7 @@ the Dove ID, which was wrong on both counts.
 
 ## D-008 — Questionnaire picklist equals the frame, plus an escape hatch
 
-**2026-09-19 · Provisional (Mark)**
+**2026-09-19 · Provisional (Mark) → Superseded by D-018** (the escape hatch itself stands)
 
 The dropdown offers exactly the frame, plus an explicit "my tower isn't
 listed" option capturing free text.
@@ -225,7 +226,7 @@ either form finds the tower.
 
 ## D-010 — Two-ring towers
 
-**2026-09-19 · OPEN**
+**2026-09-19 · OPEN · deferred by the committee 2026-09-20**
 
 Thirteen towers hold two rings each. Whether a respondent identifies a ring or
 a tower is not decided, and the right answer differs case by case: Gresford's
@@ -412,3 +413,150 @@ alter the header. A 32-bit hash would also have to be reimplemented
 identically in R, which has no native unsigned 32-bit arithmetic — exactly the
 silent cross-language divergence already being managed with the search-key
 normaliser.
+
+---
+
+## D-017 — The sampling frame is rings of four or more bells
+
+**2026-09-20 · Agreed — committee (Elva, Vicki, Tina, Mark)** · supersedes D-004
+
+The sampling frame includes full-circle rings of four or more bells.
+
+**This departs from 1988**, whose frame was five or more: *"some 5425 towers
+with five or more bells in the British Isles"*. Comparability is preserved by
+the `frame_1988` flag (D-006), which still reconstructs the 1988 rule — 5,473
+rings on the 2026-09-19 snapshot. **Any 1988 comparison uses `frame_1988`, not
+`frame_full`.**
+
+**Reasoning:** plain hunt on four is real change ringing, and a ring of four can
+sustain a band.
+
+**Frame on `dove_2026-09-19`, with D-019: 5,743 rings.**
+
+---
+
+## D-018 — The picker is broader than the sampling frame
+
+**2026-09-20 · Agreed — committee (Elva, Vicki, Tina, Mark)** · supersedes D-008
+
+The questionnaire picker offers **every ringable ring**: full-circle rings of
+any bell count, and mini-rings. **6,297 rings.** The sampling frame remains as
+set by D-017 and D-019.
+
+**Reasoning:** some mini-rings are the location of regular practices, though
+most are not, and rings of three can have bands. Nobody who rings somewhere real
+should be forced into the free-text escape to name it. The escape remains, for
+rings absent from Dove altogether.
+
+Mini-rings stay out of the *frame* (D-003) because most do not host a band that
+rings nowhere else — including them would add structural zeros and
+double-counting risk to the estimate.
+
+**Consequence:** responses will arrive from rings outside the frame — a ring of
+three, a mini-ring, a tower in a country without a volunteer. See Q-017.
+
+**Implementation:** `frame_picklist = is_ringable` in `R/frame.R`. Frame and
+picker are flags on one table (D-006), which is why this split cost one line.
+
+---
+
+## D-019 — International rings are in the frame where a volunteer is present
+
+**2026-09-20 · Agreed in principle — committee (Elva, Vicki, Tina, Mark)** · supersedes D-005
+
+Rings outside the British Isles enter the sampling frame for countries where a
+CCCBR volunteer is present.
+
+**Reasoning (committee):** in practice these will be quirky, but the census is
+about engaging ringers everywhere, not only in the British Isles.
+
+**The list lives in `data/reference/frame_countries_with_volunteers.csv`**,
+read by `scripts/04_build_frame.R` — never hard-coded. It currently holds
+Australia and the United States of America, marked `expected`: the list is still
+to be confirmed (Q-018). That is why this is Agreed *in principle*.
+
+On `dove_2026-09-19` the two countries contribute **114 rings** to the frame.
+The remaining **32** international rings of four or more bells appear in the
+picker only.
+
+Rings in volunteer countries are part of the population being estimated.
+Whether any are allocated to the chased sub-sample is a sub-sample design
+question, not settled here.
+
+---
+
+## D-020 — Mini-rings are marked in every display string
+
+**2026-09-30 · Provisional (Mark)**
+
+Every mini-ring's display carries the marker, for example
+`Abbots Bromley, The Campanile (8, mini-ring) — Staffordshire`. Applied
+universally, not only where two rings would otherwise collide.
+
+**Reasoning:** a respondent should never mistake a mini-ring for the full-circle
+ring in the same place. It also resolves the collision that D-018 would
+otherwise reintroduce — Farnham S Andrew's ring of ten and its 30lb mini ten
+both displayed as `(10)`. **Zero collisions across all 6,297 picker entries.**
+
+---
+
+## D-021 — The tower list is hosted on GitHub Pages from `cccbr/census2026`
+
+**2026-09-30 · Provisional (Mark) · committee informed** · resolves Q-014
+
+Suggested by Graham John on 2026-09-29. It is the pattern already used by six
+Council sites: `methods`, `framework`, `callingitround`, `callchanges`,
+`belfryupkeep` and `belfryprojects` `.cccbr.org.uk`.
+
+**Verified:** a `fetch()` from a QuestionPro page to `methods.cccbr.org.uk`
+returned HTTP 200 — CCCBR's Pages sites send the CORS headers that D-016
+requires.
+
+**Planned mechanics:** publish from a `/docs` folder on `main` rather than a
+separate `gh-pages` branch, so the served file sits in the same history as the
+code that generated it. `inst/questionnaire/build/` stays gitignored as
+regenerable scratch; `docs/` holds exactly what respondents receive. Versioning
+is by filename (`towers_<snapshot>.txt`), because Pages serves only the latest
+commit.
+
+**Requires the repository to be public.** Supersedes the test host
+(`raw.githubusercontent.com/Ainsworld/cccbr_census2026`), which should be
+retired once the Pages URL is live so nothing points at a personal account.
+
+The committee has been told the list is hosted externally. That is transparency,
+not DPIA coverage — **Q-015 still stands.**
+
+---
+
+## D-022 — Dove is authoritative for bells, not for affiliations
+
+**2026-09-20 · Agreed as a working prior — Vicki, Tina**
+
+Dove's information about which association a tower belongs to is likely to be
+less accurate than its information about the bells themselves. Where an
+association's own register or website disagrees with Dove, **the association's
+source prevails, and every disagreement is logged** rather than silently
+resolved.
+
+Shapes `scripts/03` (the society crosswalk, not yet written) and Q-006.
+
+---
+
+## D-023 — Two published society membership figures are not comparable
+
+**2026-09-20 · Agreed — committee (Elva, Vicki, Tina, Mark)** · annotates D-011
+
+- **Devon Association:** the published figure is a count of towers, not members,
+  because of how the association keeps its records. Which column is affected was
+  not minuted. The 2026 figure (143) is the likely one: Dove lists **163 rings**
+  affiliated to the Devon Association, consistent with a tower count, whereas
+  600 is not. **To confirm.**
+- **Veronese Association:** rings in the Veronese tradition, not change ringing.
+  Exclude it from any change-ringing membership comparison. Dove holds no
+  Italian rings, so there is no effect on the frame.
+
+The CSV is unchanged: it remains a faithful record of the published table
+(D-011). These are interpretive notes for anyone using it.
+
+**Neither explains Q-003.** The 1,827 discrepancy is in the *2025* column, and
+remains open.

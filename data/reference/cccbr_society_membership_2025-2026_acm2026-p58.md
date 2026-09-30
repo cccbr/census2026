@@ -105,3 +105,14 @@ Dorset County Association 177 → 62 (−65%), Cambridge University 225 → 160
 - Renamed and written to `data/reference/` on 2026-09-19.
 - Values unchanged from the transcription. Verification above performed on the
   same date. The 2025 total discrepancy remains open.
+
+## Committee notes, 2026-09-20 (see D-023)
+
+- **Devon Association** — the published figure is a count of towers, not
+  members. Most likely the 2026 figure (143): Dove lists 163 rings affiliated to
+  the association, consistent with a tower count. To confirm which column.
+- **Veronese Association** — rings in the Veronese tradition, not change
+  ringing. Exclude from change-ringing membership comparisons.
+
+Values in the CSV are unchanged. Neither note explains the 2025 total
+discrepancy above, which remains open (Q-003).

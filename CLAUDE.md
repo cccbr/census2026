@@ -298,8 +298,9 @@ questionnaire, the crosswalk or any published figure.
 
 Two things worth knowing without looking:
 
-- **As of 2026-09-19, nothing is `Agreed`.** Every frame decision is one
-  person's provisional working call.
+- **As of 2026-09-30, the core frame decisions are `Agreed`** by the committee
+  (D-017 bell count, D-018 picker scope, D-019 international). Several others
+  remain Provisional — check the register before relying on any of them.
 - The frame key is **`RingID`**, not `DoveID` (D-007). An earlier version of
   this file said Dove ID; that was wrong — `DoveID` is blank for 118 rings and
   `TowerID` is not unique.
