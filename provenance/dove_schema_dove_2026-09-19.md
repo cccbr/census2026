@@ -64,10 +64,10 @@ Rows: 7,262  |  Columns: 48
 
 **RingType**
 
-|value            |    n|
-|:----------------|----:|
-|Full-circle ring | 7124|
-|Lightweight ring |  138|
+| value            | n    |
+| :-----------------| -----:|
+| Full-circle ring | 7124 |
+| Lightweight ring | 138  |
 
 **TowerStatus**
 
@@ -545,6 +545,6 @@ Rows: 15,720  |  Columns: 48
 
 **Toilet**
 
-|value |     n|
-|:-----|-----:|
-|NA 
+| value | n   |
+| :------| ----:|
+| NA    |     |

@@ -12,7 +12,7 @@
   "use strict";
 
   var CFG = {
-    version: "v4.3",
+    version: "v4.2",
     // The generated data file: PLAIN TEXT, fetched and parsed as data.
     // Deliberately not a .js loaded by script tag — that would execute remote
     // code in the respondent's browser, so a compromised host could run
@@ -236,36 +236,14 @@
   // ---- widget -------------------------------------------------------------
 
   function build(native) {
-    // Hide the native input but LEAVE IT IN FLOW. Setting position:absolute
-    // here removes it from the layout, so everything below it - the progress
-    // button, the "save and continue later" link - moves up underneath the
-    // fixed overlay. syncHeight() below then keeps the reserved space equal to
-    // the overlay's persistent height.
     native.style.opacity = "0";
+    native.style.position = "absolute";
     native.style.pointerEvents = "none";
-    native.style.boxSizing = "border-box";
 
-    // Prefer 300px, but never wider than the space actually available - a
-    // forced minimum overflows narrow containers and covers whatever sits to
-    // the right of the question.
-    function viewportWidth() {
-      return window.innerWidth || document.documentElement.clientWidth;
-    }
-    function boxWidth(r) {
-      return Math.max(Math.min(Math.max(r.width, 300), viewportWidth() - 16), 180);
-    }
-    // If the box cannot fit starting at the input's left edge, slide it left
-    // rather than shrinking it below a usable width.
-    function boxLeft(r, w) {
-      return Math.max(Math.min(r.left, viewportWidth() - w - 8), 8);
-    }
-
-    var stamp = null;
     var r0 = native.getBoundingClientRect();
     var box = document.createElement("div");
-    var w0 = boxWidth(r0);
     box.style.cssText = "position:fixed;z-index:999999;background:#fff;left:" +
-      boxLeft(r0, w0) + "px;top:" + r0.top + "px;width:" + w0 + "px;";
+      r0.left + "px;top:" + r0.top + "px;width:" + Math.max(r0.width, 300) + "px;";
 
     var inp = document.createElement("input");
     inp.type = "text";
@@ -287,23 +265,12 @@
 
     box.appendChild(inp); box.appendChild(drop); box.appendChild(conf);
     if (CFG.debug) {
-      stamp = document.createElement("div");
-      stamp.style.cssText = "margin-top:4px;font-size:11px;color:#999;font-family:monospace;";
-      stamp.textContent = CFG.version + " · " + items.length + " rings";
-      box.appendChild(stamp);
+      var st = document.createElement("div");
+      st.style.cssText = "margin-top:4px;font-size:11px;color:#999;font-family:monospace;";
+      st.textContent = CFG.version + " · " + items.length + " rings";
+      box.appendChild(st);
     }
     document.body.appendChild(box);
-
-    // Reserve flow space equal to the overlay's PERSISTENT height. The dropdown
-    // is transient and may overlap - that is ordinary autocomplete behaviour -
-    // but the confirmation box stays on screen and must not cover the page.
-    function syncHeight() {
-      var h = inp.offsetHeight;
-      if (conf.style.display !== "none") h += conf.offsetHeight + 6;
-      if (stamp) h += stamp.offsetHeight + 4;
-      native.style.height = h + "px";
-    }
-    syncHeight();
 
     // Teardown. QuestionPro navigates SPA-style, so a fixed overlay survives
     // page transitions and floats over the next page unless removed.
@@ -321,10 +288,9 @@
     function reposition() {
       if (!document.body.contains(native)) { teardown(); return; }
       var r = native.getBoundingClientRect();
-      var w = boxWidth(r);
-      box.style.left = boxLeft(r, w) + "px";
+      box.style.left = r.left + "px";
       box.style.top = r.top + "px";
-      box.style.width = w + "px";
+      box.style.width = Math.max(r.width, 300) + "px";
     }
     function onDocClick(e) { if (!box.contains(e.target)) drop.style.display = "none"; }
     window.addEventListener("scroll", reposition, true);
@@ -380,14 +346,12 @@
       conf.style.display = "block";
       conf.innerHTML = "✓ <strong>" + item.label + "</strong><br>" +
         "<span style='font-size:12px;color:#666;'>Not right? Clear the box and search again.</span>";
-      syncHeight();
       log("selected", item.id, "-> native.value =", native.value);
     }
 
     inp.addEventListener("input", function () {
       if (native.value) {
         native.value = ""; conf.style.display = "none"; inp.style.borderColor = "#ccc";
-        syncHeight();
       }
       doSearch();
     });
