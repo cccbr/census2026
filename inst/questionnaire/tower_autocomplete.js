@@ -1,258 +1,401 @@
-// DOVE TOWER AUTOCOMPLETE — QuestionPro Pre JavaScript Logic
-// Paste this entire script into Pre JavaScript Logic.
-// Uses setInterval to wait for QP to finish rendering,
-// then injects a fixed-position autocomplete overlay.
+// =============================================================================
+// DOVE TOWER AUTOCOMPLETE v4 — QuestionPro Pre JavaScript Logic
 //
-// -----------------------------------------------------------------------
-// STATUS: WORKING PROTOTYPE. NOT READY FOR DEPLOYMENT.
+// Loads the tower list from an external file instead of embedding it, because
+// QuestionPro caps JS Logic at ~16-32k characters and content blocks at 10,000.
 //
-// Captured into the repository 2026-09-19. This is v2 plus the page-
-// transition teardown patch, believed to match what is in QuestionPro —
-// but that has not been confirmed against the live script field.
-//
-// It carries 50 SAMPLE towers, not the 6,161-ring frame, and has known
-// blocking defects — wrong-input binding, no error safety net, unverified
-// value capture, and a search index that will not match real Dove
-// abbreviations.
-//
-// READ inst/questionnaire/tower-autocomplete.md BEFORE CHANGING OR
-// DEPLOYING THIS. Do not treat the absence of errors in QuestionPro
-// preview as evidence that it works.
-// -----------------------------------------------------------------------
+// Set CFG.dataUrl below, then paste this whole file into Pre JavaScript Logic.
+// Full notes: inst/questionnaire/tower-autocomplete.md
+// =============================================================================
 
-(function() {
+(function () {
+  "use strict";
 
-  // === SAMPLE TOWER DATA (replace with full set from dove_to_qp_js.py) ===
-  var T = [
-    [1,"Abingdon","S Helen","Berkshire"],
-    [2,"Abingdon","S Nicolas","Berkshire"],
-    [3,"Adderbury","S Mary","Oxfordshire"],
-    [4,"Amersham","S Mary","Buckinghamshire"],
-    [5,"Appleton","S Laurence","Berkshire"],
-    [6,"Aston Rowant","S Peter and S Paul","Oxfordshire"],
-    [7,"Aylesbury","S Mary","Buckinghamshire"],
-    [8,"Banbury","S Mary","Oxfordshire"],
-    [9,"Beaconsfield","S Mary and All Saints","Buckinghamshire"],
-    [10,"Bicester","S Edburg","Oxfordshire"],
-    [11,"Bladon","S Martin","Oxfordshire"],
-    [12,"Bloxham","Our Lady of Bloxham","Oxfordshire"],
-    [13,"Bray","S Michael","Berkshire"],
-    [14,"Brightwell cum Sotwell","S Agatha","Oxfordshire"],
-    [15,"Brill","All Saints","Buckinghamshire"],
-    [16,"Buckingham","S Peter and S Paul","Buckinghamshire"],
-    [17,"Burford","S John Baptist","Oxfordshire"],
-    [18,"Caversham","S Peter","Oxfordshire"],
-    [19,"Charlbury","S Mary","Oxfordshire"],
-    [20,"Chesham","S Mary","Buckinghamshire"],
-    [21,"Chinnor","S Andrew","Oxfordshire"],
-    [22,"Chipping Norton","S Mary","Oxfordshire"],
-    [23,"Cholsey","S Mary","Oxfordshire"],
-    [24,"Deddington","S Peter and S Paul","Oxfordshire"],
-    [25,"Dorchester","S Peter and S Paul","Oxfordshire"],
-    [26,"Drayton","S Peter","Berkshire"],
-    [27,"East Hagbourne","S Andrew","Oxfordshire"],
-    [28,"Eynsham","S Leonard","Oxfordshire"],
-    [29,"Great Missenden","S Peter and S Paul","Buckinghamshire"],
-    [30,"Henley on Thames","S Mary","Oxfordshire"],
-    [31,"High Wycombe","All Saints","Buckinghamshire"],
-    [32,"Iffley","S Mary","Oxfordshire"],
-    [33,"Kidlington","S Mary","Oxfordshire"],
-    [34,"Long Crendon","S Mary","Buckinghamshire"],
-    [35,"Marlow","All Saints","Buckinghamshire"],
-    [36,"North Hinksey","S Lawrence","Oxfordshire"],
-    [37,"Oxford","Cathedral Ch of Christ","Oxfordshire"],
-    [38,"Oxford","S Giles","Oxfordshire"],
-    [39,"Oxford","S Mary Magdalen","Oxfordshire"],
-    [40,"Oxford","S Mary the Virgin","Oxfordshire"],
-    [41,"Oxford","S Thomas the Martyr","Oxfordshire"],
-    [42,"Princes Risborough","S Mary","Buckinghamshire"],
-    [43,"Reading","S Giles","Berkshire"],
-    [44,"Reading","S Laurence","Berkshire"],
-    [45,"Reading","S Mary","Berkshire"],
-    [46,"Steeple Aston","S Peter and S Paul","Oxfordshire"],
-    [47,"Thame","S Mary","Oxfordshire"],
-    [48,"Wallingford","S Mary le More","Oxfordshire"],
-    [49,"Wantage","SS Peter and Paul","Oxfordshire"],
-    [50,"Witney","S Mary","Oxfordshire"]
-  ];
+  var CFG = {
+    version: "v4.3",
+    // The generated data file: PLAIN TEXT, fetched and parsed as data.
+    // Deliberately not a .js loaded by script tag — that would execute remote
+    // code in the respondent's browser, so a compromised host could run
+    // anything on a page collecting census responses. Fetching data means the
+    // worst case is bad data, which the checksum catches.
+    // The host must send Access-Control-Allow-Origin (jsDelivr does).
+    dataUrl: "https://cccbr.github.io/census2026/towers_dove_2026-09-19.txt",
+    debug: true,
+    loadTimeoutMs: 8000,
+    cacheKey: "ringing_census_towers",
+    minChars: 2,
+    maxResults: 12,
+    pollMs: 500,
+    pollTimeoutMs: 20000,
+    tidyMs: 1000
+  };
 
-  // Build search index
-  var items = [];
-  for (var i = 0; i < T.length; i++) {
-    var id = T[i][0], pl = T[i][1], ded = T[i][2], co = T[i][3];
-    var label = pl + ", " + ded + " (" + co + ")";
-    items.push({
-      label: label,
-      value: label + " [" + id + "]",
-      search: (pl + " " + ded + " " + co).toLowerCase()
+  function log() {
+    if (!CFG.debug || !window.console) return;
+    var a = [].slice.call(arguments); a.unshift("[tower " + CFG.version + "]");
+    console.log.apply(console, a);
+  }
+
+  // ---- search key folding -------------------------------------------------
+  // MUST stay in step with normalise_search_key() in R/text.R. Ringers type
+  // "st marys" where Dove writes "S Mary V"; both sides fold through this.
+  function foldKey(s) {
+    if (!s) return "";
+    var o = s;
+    try { o = o.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) {}
+    return o.toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/\bsaints?\b/g, "st")
+      .replace(/\bss?\.?(?=\s|$)/g, "st")
+      .replace(/['’]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^\s+|\s+$/g, "");
+  }
+
+  // ---- data loading -------------------------------------------------------
+  //
+  // Integrity is checked by row count and character count, not a hash.
+  //
+  // A hash would add almost nothing here. The realistic failures are
+  // truncation and a partial localStorage write, both of which the counts
+  // catch. Corruption in transit is prevented by HTTPS; the wrong file being
+  // served is caught by the snapshot id in the header; and a hash cannot
+  // detect tampering, because anyone able to alter the file can alter the
+  // header too.
+  //
+  // Against that, a 32-bit hash would have to be reimplemented identically in
+  // R — which has no native unsigned 32-bit arithmetic — creating exactly the
+  // kind of silent cross-language divergence already being managed with
+  // foldKey(). Not worth it.
+
+  var items = null, dataErr = null, onData = null;
+
+  function buildIndex(payload) {
+    var t0 = Date.now(), out = [], lines = payload.split("\n");
+    for (var i = 0; i < lines.length; i++) {
+      if (!lines[i]) continue;
+      var p = lines[i].split("|");
+      if (p.length < 2) continue;
+      out.push({
+        id: p[0], label: p[1],
+        value: p[1] + " [" + p[0] + "]",
+        search: foldKey(p[1] + " " + (p[2] || ""))
+      });
+    }
+    log("indexed", out.length, "rings in", Date.now() - t0, "ms");
+    return out;
+  }
+
+  function accept(obj, source) {
+    if (obj.c !== obj.d.length) {
+      log("LENGTH MISMATCH from " + source + ": got " + obj.d.length +
+          " chars, header declares " + obj.c + " - payload is truncated");
+      return false;
+    }
+    var idx = buildIndex(obj.d);
+    if (idx.length !== obj.n) {
+      log("ROW COUNT MISMATCH from " + source + ": indexed " + idx.length +
+          ", header declares " + obj.n);
+      return false;
+    }
+    items = idx;
+    log("loaded", obj.n, "rings from", source, "snapshot", obj.v);
+    return true;
+  }
+
+  // The file is plain text. First line is a header, the rest is the payload:
+  //   # <snapshot_id> <n_rings> <n_chars>
+  //   <ringid>|<display>|<alt names>
+  //   ...
+  // Readable with curl, greppable, and reusable by anything that isn't this
+  // widget — which a JSON blob or a .js assignment would not be.
+  function parse(text) {
+    var nl = text.indexOf("\n");
+    if (nl < 0) return null;
+    var head = text.slice(0, nl).trim().split(/\s+/);
+    if (head[0] !== "#" || head.length < 4) return null;
+    return { v: head[1], n: +head[2], c: +head[3], d: text.slice(nl + 1) };
+  }
+
+  function cacheRead() {
+    try {
+      var raw = window.localStorage.getItem(CFG.cacheKey);
+      return raw ? parse(raw) : null;
+    } catch (e) { return null; }
+  }
+  function cacheWrite(text) {
+    try { window.localStorage.setItem(CFG.cacheKey, text); } catch (e) {}
+  }
+
+  function fetchText(url, ms, cb) {
+    var done = false;
+    var t = setTimeout(function () { if (!done) { done = true; cb(null, "timeout"); } }, ms);
+    function ok(txt)  { if (done) return; done = true; clearTimeout(t); cb(txt, null); }
+    function bad(why) { if (done) return; done = true; clearTimeout(t); cb(null, why); }
+
+    if (window.fetch) {
+      fetch(url, { credentials: "omit" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(ok)
+        .catch(function (e) { bad(e.message || "fetch failed"); });
+    } else {
+      // Older browsers. XHR is subject to the same CORS rules as fetch.
+      try {
+        var x = new XMLHttpRequest();
+        x.open("GET", url, true);
+        x.onload = function () {
+          (x.status >= 200 && x.status < 300) ? ok(x.responseText) : bad("HTTP " + x.status);
+        };
+        x.onerror = function () { bad("network"); };
+        x.send();
+      } catch (e) { bad("xhr threw"); }
+    }
+  }
+
+  function loadData() {
+    var cached = cacheRead();
+    if (cached && cached.d && accept(cached, "cache")) { if (onData) onData(); return; }
+
+    log("fetching", CFG.dataUrl);
+    fetchText(CFG.dataUrl, CFG.loadTimeoutMs, function (text, err) {
+      if (err) {
+        dataErr = err;
+        log("load FAILED -", err, "- check the URL, CORS headers and the Network tab");
+      } else {
+        var obj = parse(text);
+        if (!obj) { dataErr = "malformed"; log("fetched but the header line is missing or malformed"); }
+        else if (!accept(obj, "network")) { dataErr = "checksum"; }
+        else { cacheWrite(text); }
+      }
+      if (onData) onData();
     });
   }
 
-  // Wait for QP to finish rendering, then inject
-  var ready = false;
-  var check = setInterval(function() {
-    if (ready) return;
+  // ---- find the question's input -----------------------------------------
 
-    // Find the text input for this question
-    var inputs = document.querySelectorAll('input[type="text"]');
-    var native = null;
-    for (var j = 0; j < inputs.length; j++) {
-      // Skip tiny/hidden inputs; find the visible survey answer input
-      if (inputs[j].offsetWidth > 50) {
-        native = inputs[j];
-      }
+  function findInput() {
+    if (CFG.inputSelector) return document.querySelector(CFG.inputSelector);
+    var ins = document.querySelectorAll('input[type="text"]');
+    for (var i = 0; i < ins.length; i++) {
+      var el = ins[i];
+      if (el.offsetWidth > 50 && el.offsetParent !== null && !el.getAttribute("data-tower-bound")) return el;
     }
-    if (!native) return;
+    return null;
+  }
 
-    ready = true;
-    clearInterval(check);
+  function restore(n) {
+    if (!n) return;
+    n.style.opacity = ""; n.style.position = ""; n.style.pointerEvents = "";
+  }
 
-    // Hide native input
+  loadData();
+
+  var started = Date.now();
+  var poll = setInterval(function () {
+    var native = null;
+    try { native = findInput(); } catch (e) { log("findInput threw", e); }
+    if (!native) {
+      if (Date.now() - started > CFG.pollTimeoutMs) {
+        clearInterval(poll); log("gave up - no input found");
+      }
+      return;
+    }
+    clearInterval(poll);
+    native.setAttribute("data-tower-bound", "1");
+    log("bound to", native.name || native.id || "(unnamed)");
+
+    if (items) { start(native); }
+    else if (dataErr) { degrade(native); }
+    else { onData = function () { items ? start(native) : degrade(native); }; }
+  }, CFG.pollMs);
+
+  function start(native) {
+    try { build(native); }
+    catch (e) { restore(native); log("build failed, native input restored", e); }
+  }
+
+  // No tower list: leave a usable text box rather than a dead question, and
+  // label it so these responses are separable at analysis time.
+  function degrade(native) {
+    restore(native);
+    log("DEGRADED to free text -", dataErr);
+    try {
+      var note = document.createElement("div");
+      note.style.cssText = "margin-top:6px;padding:8px 12px;background:#fff8e1;" +
+        "border:1px solid #ffe082;border-radius:6px;font-size:13px;color:#795548;";
+      note.textContent = "The tower list could not be loaded. Please type your " +
+        "tower's place name and dedication, for example: Banbury, S Mary.";
+      native.parentNode && native.parentNode.appendChild(note);
+    } catch (e) {}
+  }
+
+  // ---- widget -------------------------------------------------------------
+
+  function build(native) {
+    // Hide the native input but LEAVE IT IN FLOW. Setting position:absolute
+    // here removes it from the layout, so everything below it - the progress
+    // button, the "save and continue later" link - moves up underneath the
+    // fixed overlay. syncHeight() below then keeps the reserved space equal to
+    // the overlay's persistent height.
     native.style.opacity = "0";
-    native.style.position = "absolute";
     native.style.pointerEvents = "none";
+    native.style.boxSizing = "border-box";
 
-    // Get position of native input to place our widget
-    var rect = native.getBoundingClientRect();
+    // Prefer 300px, but never wider than the space actually available - a
+    // forced minimum overflows narrow containers and covers whatever sits to
+    // the right of the question.
+    function viewportWidth() {
+      return window.innerWidth || document.documentElement.clientWidth;
+    }
+    function boxWidth(r) {
+      return Math.max(Math.min(Math.max(r.width, 300), viewportWidth() - 16), 180);
+    }
+    // If the box cannot fit starting at the input's left edge, slide it left
+    // rather than shrinking it below a usable width.
+    function boxLeft(r, w) {
+      return Math.max(Math.min(r.left, viewportWidth() - w - 8), 8);
+    }
 
-    // Create container
+    var stamp = null;
+    var r0 = native.getBoundingClientRect();
     var box = document.createElement("div");
-    box.style.cssText =
-      "position:fixed; z-index:999999; background:#fff; " +
-      "left:" + rect.left + "px; top:" + rect.top + "px; " +
-      "width:" + Math.max(rect.width, 300) + "px;";
+    var w0 = boxWidth(r0);
+    box.style.cssText = "position:fixed;z-index:999999;background:#fff;left:" +
+      boxLeft(r0, w0) + "px;top:" + r0.top + "px;width:" + w0 + "px;";
 
-    // Search input
     var inp = document.createElement("input");
     inp.type = "text";
     inp.placeholder = "Type your tower name…";
     inp.setAttribute("autocomplete", "off");
     inp.setAttribute("autocorrect", "off");
-    inp.style.cssText =
-      "width:100%; padding:10px 12px; font-size:16px; " +
-      "border:2px solid #ccc; border-radius:6px; " +
-      "box-sizing:border-box; outline:none; font-family:inherit;";
+    inp.setAttribute("autocapitalize", "off");
+    inp.setAttribute("spellcheck", "false");
+    inp.style.cssText = "width:100%;padding:10px 12px;font-size:16px;border:2px solid #ccc;" +
+      "border-radius:6px;box-sizing:border-box;outline:none;font-family:inherit;";
 
-    // Results dropdown
     var drop = document.createElement("div");
-    drop.style.cssText =
-      "max-height:220px; overflow-y:auto; border:1px solid #ddd; " +
-      "border-top:none; border-radius:0 0 6px 6px; background:#fff; " +
-      "display:none; box-shadow:0 4px 12px rgba(0,0,0,0.15);";
+    drop.style.cssText = "max-height:220px;overflow-y:auto;border:1px solid #ddd;border-top:none;" +
+      "border-radius:0 0 6px 6px;background:#fff;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);";
 
-    // Selection confirmation
     var conf = document.createElement("div");
-    conf.style.cssText =
-      "display:none; margin-top:6px; padding:8px 12px; " +
-      "background:#e8f5e9; border:1px solid #a5d6a7; " +
-      "border-radius:6px; font-size:14px; color:#2e7d32;";
+    conf.style.cssText = "display:none;margin-top:6px;padding:8px 12px;background:#e8f5e9;" +
+      "border:1px solid #a5d6a7;border-radius:6px;font-size:14px;color:#2e7d32;";
 
-    box.appendChild(inp);
-    box.appendChild(drop);
-    box.appendChild(conf);
+    box.appendChild(inp); box.appendChild(drop); box.appendChild(conf);
+    if (CFG.debug) {
+      stamp = document.createElement("div");
+      stamp.style.cssText = "margin-top:4px;font-size:11px;color:#999;font-family:monospace;";
+      stamp.textContent = CFG.version + " · " + items.length + " rings";
+      box.appendChild(stamp);
+    }
     document.body.appendChild(box);
 
-    // Reposition on scroll/resize, remove if page moves on
-    //
-    // QuestionPro uses SPA-style navigation, so a position:fixed overlay
-    // survives page transitions and floats over the next page. This teardown
-    // watches for the native input leaving the DOM. See the "leaks" note in
-    // tower-autocomplete.md — the interval below is never cleared, and the
-    // outside-click handler is never removed.
-    function reposition() {
-      if (!document.body.contains(native)) {
-        box.parentNode && box.parentNode.removeChild(box);
-        window.removeEventListener("scroll", reposition, true);
-        window.removeEventListener("resize", reposition);
-        return;
-      }
-      var r = native.getBoundingClientRect();
-      box.style.left = r.left + "px";
-      box.style.top = r.top + "px";
-      box.style.width = Math.max(r.width, 300) + "px";
+    // Reserve flow space equal to the overlay's PERSISTENT height. The dropdown
+    // is transient and may overlap - that is ordinary autocomplete behaviour -
+    // but the confirmation box stays on screen and must not cover the page.
+    function syncHeight() {
+      var h = inp.offsetHeight;
+      if (conf.style.display !== "none") h += conf.offsetHeight + 6;
+      if (stamp) h += stamp.offsetHeight + 4;
+      native.style.height = h + "px";
     }
+    syncHeight();
+
+    // Teardown. QuestionPro navigates SPA-style, so a fixed overlay survives
+    // page transitions and floats over the next page unless removed.
+    var tidy = null, torn = false;
+    function teardown() {
+      if (torn) return;
+      torn = true;
+      if (box.parentNode) box.parentNode.removeChild(box);
+      window.removeEventListener("scroll", reposition, true);
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("click", onDocClick);
+      if (tidy) clearInterval(tidy);
+      log("torn down");
+    }
+    function reposition() {
+      if (!document.body.contains(native)) { teardown(); return; }
+      var r = native.getBoundingClientRect();
+      var w = boxWidth(r);
+      box.style.left = boxLeft(r, w) + "px";
+      box.style.top = r.top + "px";
+      box.style.width = w + "px";
+    }
+    function onDocClick(e) { if (!box.contains(e.target)) drop.style.display = "none"; }
     window.addEventListener("scroll", reposition, true);
     window.addEventListener("resize", reposition);
-    setInterval(function() { reposition(); }, 1000);
+    document.addEventListener("click", onDocClick);
+    tidy = setInterval(reposition, CFG.tidyMs);
 
-    // Search logic
     function doSearch() {
-      var q = inp.value.toLowerCase().split(/\s+/);
       drop.innerHTML = "";
-      if (inp.value.length < 2) { drop.style.display = "none"; return; }
-
-      var hits = items.filter(function(it) {
-        return q.every(function(t) { return it.search.indexOf(t) !== -1; });
-      });
-
-      if (hits.length === 0) {
-        drop.style.display = "block";
+      if (inp.value.length < CFG.minChars) { drop.style.display = "none"; return; }
+      var q = foldKey(inp.value).split(" "), hits = [];
+      for (var i = 0; i < items.length; i++) {
+        var s = items[i].search, ok = true;
+        for (var j = 0; j < q.length; j++) {
+          if (q[j] && s.indexOf(q[j]) === -1) { ok = false; break; }
+        }
+        if (ok) hits.push(items[i]);
+      }
+      drop.style.display = "block";
+      if (!hits.length) {
         drop.innerHTML = '<div style="padding:10px;color:#999;font-style:italic;font-size:14px;">No matching towers</div>';
         return;
       }
-
-      drop.style.display = "block";
-      var show = hits.slice(0, 12);
-      for (var k = 0; k < show.length; k++) {
-        (function(item) {
-          var row = document.createElement("div");
-          row.style.cssText =
-            "padding:8px 12px; cursor:pointer; font-size:14px; " +
-            "border-bottom:1px solid #f0f0f0;";
-          row.textContent = item.label;
-          row.addEventListener("mouseenter", function() {
-            row.style.background = "#e3f2fd";
-          });
-          row.addEventListener("mouseleave", function() {
-            row.style.background = "#fff";
-          });
-          row.addEventListener("click", function(e) {
-            e.preventDefault();
-            // Write to native input
-            native.value = item.value;
-            try {
-              var ev = new Event("change", {bubbles:true});
-              native.dispatchEvent(ev);
-            } catch(ex) {}
-            // Update UI
-            inp.value = item.label;
-            inp.style.borderColor = "#4caf50";
-            drop.style.display = "none";
-            conf.style.display = "block";
-            conf.innerHTML = "✓ <strong>" + item.label +
-              "</strong><br><span style='font-size:12px;color:#666;'>" +
-              "Not right? Clear the box and search again.</span>";
-          });
-          drop.appendChild(row);
-        })(show[k]);
-      }
-
-      if (hits.length > 12) {
-        var more = document.createElement("div");
-        more.style.cssText = "padding:8px 12px;color:#999;font-size:13px;font-style:italic;";
-        more.textContent = (hits.length - 12) + " more — keep typing to narrow down";
-        drop.appendChild(more);
+      var show = hits.slice(0, CFG.maxResults);
+      for (var k = 0; k < show.length; k++) drop.appendChild(makeRow(show[k]));
+      if (hits.length > CFG.maxResults) {
+        var m = document.createElement("div");
+        m.style.cssText = "padding:8px 12px;color:#999;font-size:13px;font-style:italic;";
+        m.textContent = (hits.length - CFG.maxResults) + " more — keep typing to narrow down";
+        drop.appendChild(m);
       }
     }
 
-    inp.addEventListener("input", function() {
+    function makeRow(item) {
+      var row = document.createElement("div");
+      row.style.cssText = "padding:8px 12px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0f0f0;";
+      row.textContent = item.label;
+      row.addEventListener("mouseenter", function () { row.style.background = "#e3f2fd"; });
+      row.addEventListener("mouseleave", function () { row.style.background = "#fff"; });
+      row.addEventListener("click", function (e) { e.preventDefault(); select(item); });
+      return row;
+    }
+
+    function select(item) {
+      native.value = item.value;
+      try {
+        native.dispatchEvent(new Event("input", { bubbles: true }));
+        native.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (ex) { log("could not dispatch events", ex); }
+      inp.value = item.label;
+      inp.style.borderColor = "#4caf50";
+      drop.style.display = "none";
+      conf.style.display = "block";
+      conf.innerHTML = "✓ <strong>" + item.label + "</strong><br>" +
+        "<span style='font-size:12px;color:#666;'>Not right? Clear the box and search again.</span>";
+      syncHeight();
+      log("selected", item.id, "-> native.value =", native.value);
+    }
+
+    inp.addEventListener("input", function () {
       if (native.value) {
-        native.value = "";
-        conf.style.display = "none";
-        inp.style.borderColor = "#ccc";
+        native.value = ""; conf.style.display = "none"; inp.style.borderColor = "#ccc";
+        syncHeight();
       }
       doSearch();
     });
-
-    // Close dropdown on outside click
-    document.addEventListener("click", function(e) {
-      if (!box.contains(e.target)) { drop.style.display = "none"; }
-    });
-
-    inp.addEventListener("focus", function() {
+    inp.addEventListener("focus", function () {
       if (!native.value) inp.style.borderColor = "#2196f3";
     });
 
-  }, 500);
+    log("widget built");
+  }
 
 })();

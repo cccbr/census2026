@@ -12,7 +12,13 @@ anything about behaviour.
 
 ## Done
 
-- **Full scale.** 6,161 rings load, index in ~40 ms, and search correctly.
+- **Full scale.** The 6,297-ring picker loads, indexes in ~40 ms, and searches
+  correctly.
+- **Value capture** confirmed from the response backend (was step 1).
+- **iPhone 13 Safari** works (part of step 3).
+- **Layout** — v4.3 reserves page space for the confirmation box and cannot
+  overflow the viewport.
+- **Hosting** on GitHub Pages from `docs/` (D-021).
 - **Search folding.** `St Mary Amersham` → `Amersham, S Mary V (12) —
   Buckinghamshire`. v2 would have returned nothing.
 - **External hosting proven.** fetch and script-tag both permitted; no CSP
@@ -107,7 +113,9 @@ still being stabilised (D-013).
 
 ## Step 9 — production hardening
 
-- Move hosting off `raw.githubusercontent.com` (Q-014).
+- Set `FREEZE_PUBLISHED_LISTS <- TRUE` in `scripts/05` so a live list can
+  never change under respondents.
+- Retire the test copy on the personal `Ainsworld` account.
 - `CFG.debug = false`.
 - Confirm the Dove CC BY-SA attribution is live in the survey text (Q-001).
 - Regenerate from the final frame snapshot; record the build manifest.

@@ -1,14 +1,19 @@
 # Tower autocomplete widget — QuestionPro
 
-Documentation for `tower_autocomplete_v4.js`, the tower-selection control for
+Documentation for `tower_autocomplete.js`, the tower-selection control for
 the Tower Representative and Individual Ringer surveys.
 
-**Status as at 2026-09-19: working end to end at full scale.** 6,161 rings
-loaded, indexed and searched inside QuestionPro preview. Typing
-`St Mary Amersham` correctly returns `Amersham, S Mary V (12) — Buckinghamshire`.
+**Status as at 2026-09-30: working end to end, live and in preview, at full
+scale.** Currently v4.3, serving the 6,297-ring picker (D-018) from GitHub Pages
+(D-021). Typing `St Mary Amersham` returns `Amersham, S Mary V (12) —
+Buckinghamshire`; selections reach the response export with their RingID; tested
+on desktop and on iPhone 13 Safari.
 
-Not yet production-ready: see *Outstanding* below. Value capture into the
-response export remains unproven and is still the most important open test.
+The version lives in `CFG.version`, shown in the debug stamp and every console
+line — not in the filename. Earlier versions are in git history, and the reasons
+they were superseded are in D-015 and D-016.
+
+Not yet production-ready: see *Outstanding* below.
 
 ---
 
@@ -103,11 +108,16 @@ cache write; HTTPS prevents corruption in transit; the snapshot id catches the
 wrong file; and a hash cannot detect tampering by anyone able to edit the
 header. See D-016.
 
-**Current test URL** — not suitable for fieldwork, see Q-014:
+**Live URL**, served by GitHub Pages from `docs/` (D-021):
 
 ```
-https://raw.githubusercontent.com/Ainsworld/cccbr_census2026/refs/heads/main/towers_dove_2026-09-19.txt
+https://cccbr.github.io/census2026/towers_dove_2026-09-19.txt
 ```
+
+Published by `scripts/05_export_questionnaire_towers.R`, which also regenerates
+the index page at <https://cccbr.github.io/census2026/>. If the site moves to a
+`cccbr.org.uk` subdomain, decide that before fieldwork: GitHub would redirect the
+old address, but a redirect is one more thing that can fail in reference week.
 
 ---
 
@@ -149,24 +159,22 @@ sample data used expanded dedications.
 
 ### Blocking before fieldwork
 
-1. **Value capture is unproven.** Select a tower, submit, and read the field
-   back from Analytics → Raw Data or an export. The green confirmation proves
-   only that the click handler ran; if QuestionPro's form layer is
-   framework-controlled, `native.value = x` can be overwritten on the next
-   render and the response submits empty with no error. If it fails, try the
-   native-setter approach in `todo.md` step 1.
-2. **Bind to the question explicitly.** v4 takes the first visible text input
+1. ~~Value capture~~ — **passed.** The response backend shows
+   `Amersham, S Mary V (12) — Buckinghamshire [4914]`, RingID included.
+2. **Bind to the question explicitly.** The widget takes the first visible text input
    wider than 50 px — correct on a single-question page, a guess elsewhere. Set
    `CFG.inputSelector` once the real question's `name` is known. Until then, do
    not put another text question on the same page.
-3. **Mobile untested.** `position:fixed` against a virtual keyboard resizing the
-   visual viewport; iOS Safari is the likely failure.
+3. ~~Mobile~~ — **passed** on iPhone 13 Safari, despite the prediction that
+   `position:fixed` would fail there. Android and a small phone in landscape are
+   still untested.
 4. **Back-navigation untested.** Teardown removes the widget; nothing
    re-injects it. If QuestionPro does not re-run Pre JS on back-navigation, a
    respondent who goes back gets an uncontrolled free-text field containing the
    composite value. See Q-011.
 5. **"My tower isn't listed" escape** is required by D-008 and not built.
-6. **Hosting** must move off `raw.githubusercontent.com` (Q-014).
+6. ~~Hosting~~ — **done** (D-021). Retire the test copy on the personal
+   `Ainsworld` account so nothing still points there.
 
 ### Deferred deliberately
 
