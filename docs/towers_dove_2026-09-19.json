@@ -1,0 +1,11 @@
+{
+  "generated_at_utc": "2026-09-30T22:20:00Z",
+  "script": "scripts/05_export_questionnaire_towers.R",
+  "snapshot_id": "dove_2026-09-19",
+  "frame_artefact": "frame_dove_2026-09-19.parquet",
+  "rule": "frame_picklist: every ringable ring (D-018)",
+  "n_rings": 6297,
+  "n_chars": 307472,
+  "bytes": 320121,
+  "sha256": "c43f8eae372c0ad9c624cc5910533f8861d33e23ca2cdaf13c0dae6432de726e"
+}

@@ -21,5 +21,5 @@ DOVE_ATTRIBUTION <- paste(
   "Tower data from Dove's Guide for Church Bell Ringers",
   "(https://dove.cccbr.org.uk), (c) the Central Council of Church Bell Ringers,",
   "licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).",
-  "Modified: filtered to the census sampling frame and reformatted."
+  "Modified: filtered to ringable rings and reformatted."
 )
