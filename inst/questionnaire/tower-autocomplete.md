@@ -27,7 +27,7 @@ file (D-015, D-016).
 QuestionPro page
   └─ Pre JavaScript Logic  (14 KB widget)
        ├─ fetch()  ──────────►  towers_<snapshot>.txt   (304 KB, ~80 KB gzipped)
-       ├─ localStorage cache (keyed by snapshot)
+       ├─ local copy (keyed by URL) — checked once per questionnaire (D-025)
        └─ overlay injected over the hidden native input
 ```
 
@@ -143,9 +143,26 @@ sample data used expanded dedications.
 
 ## Failure handling
 
-- **8-second timeout** on the fetch.
-- **`localStorage` cache** keyed by snapshot, so a returning or back-navigating
-  respondent does not refetch.
+- **Checked once per questionnaire** (D-025). The first picker in a browser tab
+  asks the server whether the list has changed — normally a tiny "not modified"
+  reply. Every later picker in that tab uses the stored copy with **no network
+  at all**, which matters in the individual survey on weak rural signal. A
+  respondent resuming next day through Save & Continue Later is in a new tab,
+  so is checked again. **Nobody is ever asked to clear anything**; a tester who
+  republishes the list just opens the survey in a new tab.
+- **Timeouts depend on what failure costs.** With nothing stored, the widget
+  waits up to **20 seconds**, because the alternative is free text. With a
+  stored copy, it gives up after **3 seconds** and uses the copy.
+- **Stored copy.** Kept in `localStorage` under a key built from the URL. Each
+  successful load deletes any other stored list, including the fixed-key copy
+  written by versions before v4.4. If the stored copy is used because the
+  network failed, the tab is still marked as checked, so a failing connection
+  costs one wait, not one at every picker.
+
+  *Correction:* earlier versions of this document described the cache as "keyed
+  by snapshot". It was not — the key was fixed, and the cache was consulted
+  *before* the network, so testers saw a stale list until they cleared browser
+  storage by hand. Both fixed in v4.4.
 - **Degraded path**: on timeout, network failure, malformed header or count
   mismatch, the native input is restored and a message asks for place name and
   dedication. Never a dead question. These responses are separable at analysis

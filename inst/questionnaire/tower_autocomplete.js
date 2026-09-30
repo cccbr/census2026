@@ -12,7 +12,7 @@
   "use strict";
 
   var CFG = {
-    version: "v4.3",
+    version: "v4.4",
     // The generated data file: PLAIN TEXT, fetched and parsed as data.
     // Deliberately not a .js loaded by script tag — that would execute remote
     // code in the respondent's browser, so a compromised host could run
@@ -21,8 +21,14 @@
     // The host must send Access-Control-Allow-Origin (jsDelivr does).
     dataUrl: "https://cccbr.github.io/census2026/towers_dove_2026-09-19.txt",
     debug: true,
-    loadTimeoutMs: 8000,
-    cacheKey: "ringing_census_towers",
+    // How long to wait for the list. It depends on what failure costs:
+    // with no stored copy the alternative is free text, which is worse data
+    // than a slow picker - so be patient on weak rural signal. With a stored
+    // copy the alternative is nearly as good, so give up quickly.
+    timeoutNoCopyMs: 20000,
+    timeoutWithCopyMs: 3000,
+    // Local copies are keyed by URL, so a new list never collides with an old one.
+    cachePrefix: "ringing_census_towers|",
     minChars: 2,
     maxResults: 12,
     pollMs: 500,
@@ -118,14 +124,29 @@
     return { v: head[1], n: +head[2], c: +head[3], d: text.slice(nl + 1) };
   }
 
+  function cacheKey() { return CFG.cachePrefix + CFG.dataUrl; }
+
   function cacheRead() {
     try {
-      var raw = window.localStorage.getItem(CFG.cacheKey);
+      var raw = window.localStorage.getItem(cacheKey());
       return raw ? parse(raw) : null;
     } catch (e) { return null; }
   }
+
+  // Store this list, and delete every other list this widget has cached -
+  // including the single fixed-key copy written by versions before v4.4, which
+  // is what left testers stuck on an old list until they cleared it by hand.
   function cacheWrite(text) {
-    try { window.localStorage.setItem(CFG.cacheKey, text); } catch (e) {}
+    try {
+      var ls = window.localStorage, stale = [], i;
+      for (i = 0; i < ls.length; i++) {
+        var k = ls.key(i);
+        if (k && k.indexOf("ringing_census_towers") === 0 && k !== cacheKey()) stale.push(k);
+      }
+      for (i = 0; i < stale.length; i++) ls.removeItem(stale[i]);
+      ls.setItem(cacheKey(), text);
+      if (stale.length) log("removed", stale.length, "stale cached list(s)");
+    } catch (e) {}
   }
 
   function fetchText(url, ms, cb) {
@@ -135,7 +156,11 @@
     function bad(why) { if (done) return; done = true; clearTimeout(t); cb(null, why); }
 
     if (window.fetch) {
-      fetch(url, { credentials: "omit" })
+      // "no-cache" makes the browser check with the server every time rather
+      // than trusting its own copy. When the list is unchanged the server
+      // answers "not modified" and nothing is re-downloaded; when it has been
+      // republished, the new list arrives. No one ever has to clear anything.
+      fetch(url, { credentials: "omit", cache: "no-cache" })
         .then(function (r) {
           if (!r.ok) throw new Error("HTTP " + r.status);
           return r.text();
@@ -156,20 +181,60 @@
     }
   }
 
+  // ONCE PER QUESTIONNAIRE (D-025).
+  //
+  // The first picker in a browser session checks the list against the server
+  // (a revalidating fetch - normally a tiny "not modified" reply). Every later
+  // picker in the same session uses the stored copy with no network at all,
+  // which matters in the individual survey, where the picker can appear several
+  // times on a weak rural connection.
+  //
+  // "Session" is the browser tab: it survives QuestionPro's page changes and
+  // ends when the tab closes, so a respondent who resumes tomorrow via Save &
+  // Continue Later is checked again. A tester who republishes the list needs
+  // only to open the survey in a new tab.
+  function sessionKey() { return "ringing_census_checked|" + CFG.dataUrl; }
+  function checkedThisSession() {
+    try { return window.sessionStorage.getItem(sessionKey()) === "1"; } catch (e) { return false; }
+  }
+  function markChecked() {
+    try { window.sessionStorage.setItem(sessionKey(), "1"); } catch (e) {}
+  }
+
   function loadData() {
     var cached = cacheRead();
-    if (cached && cached.d && accept(cached, "cache")) { if (onData) onData(); return; }
+    // Cheap integrity test to decide the timeout; the full check runs on use.
+    var haveCopy = !!(cached && cached.d && cached.c === cached.d.length);
 
-    log("fetching", CFG.dataUrl);
-    fetchText(CFG.dataUrl, CFG.loadTimeoutMs, function (text, err) {
-      if (err) {
-        dataErr = err;
-        log("load FAILED -", err, "- check the URL, CORS headers and the Network tab");
-      } else {
+    if (haveCopy && checkedThisSession()) {
+      if (accept(cached, "this session's copy")) { if (onData) onData(); return; }
+      haveCopy = false;
+    }
+
+    var timeout = haveCopy ? CFG.timeoutWithCopyMs : CFG.timeoutNoCopyMs;
+    log("fetching", CFG.dataUrl, "- timeout", timeout, "ms");
+    fetchText(CFG.dataUrl, timeout, function (text, err) {
+      if (!err) {
         var obj = parse(text);
-        if (!obj) { dataErr = "malformed"; log("fetched but the header line is missing or malformed"); }
-        else if (!accept(obj, "network")) { dataErr = "checksum"; }
-        else { cacheWrite(text); }
+        if (obj && accept(obj, "network")) {
+          cacheWrite(text);
+          markChecked();
+          if (onData) onData();
+          return;
+        }
+        err = obj ? "count mismatch" : "malformed header";
+      }
+      log("network load failed -", err);
+      if (haveCopy && accept(cached, "local copy")) {
+        // Mark the session checked even on this path: on a failing connection,
+        // retrying at every later picker would cost the respondent another wait
+        // each time for a list they already have.
+        markChecked();
+        log("using the local copy from an earlier visit");
+      } else {
+        // Not marked: with nothing stored, the next picker tries again.
+        dataErr = err;
+        log("no usable local copy - degrading to free text");
       }
       if (onData) onData();
     });

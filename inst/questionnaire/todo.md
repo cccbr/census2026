@@ -78,9 +78,9 @@ Select a tower, go forward a page, come back.
 - Widget reappears → QuestionPro re-runs Pre JS on back-navigation. Nothing to
   do.
 - Bare text box containing the composite value → respondents careful enough to
-  check their answer get an uncontrolled free-text field. The `localStorage`
-  cache means no refetch, so re-injection is cheap; the poll needs to keep
-  running rather than stopping at first bind.
+  check their answer get an uncontrolled free-text field. Re-injection
+  needs no network — the list is already checked for this tab (D-025); the poll
+  needs to keep running rather than stopping at first bind.
 
 ## Step 5 — "my tower isn't listed"
 

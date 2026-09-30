@@ -560,3 +560,84 @@ The CSV is unchanged: it remains a faithful record of the published table
 
 **Neither explains Q-003.** The 1,827 discrepancy is in the *2025* column, and
 remains open.
+
+---
+
+## D-024 — The tower list is always fetched; the local copy is a fallback only
+
+**2026-09-30 · Provisional (Mark)** · corrects the caching described in D-015
+
+Every page load fetches the list with `cache: "no-cache"`, so the browser
+revalidates with GitHub Pages each time: a "not modified" reply when the list is
+unchanged, the new list when it has been republished. The copy kept in
+`localStorage` is used **only** when the network fails or returns a file whose
+header counts do not match.
+
+**Reasoning:** no tester, volunteer or respondent should ever need to know a
+cache exists. Up to v4.3 the widget consulted its cache *first*, under a single
+fixed key, and never checked the server while that copy was intact. When the
+list was republished at the same URL (6,161 → 6,297 rings under D-018), testers
+kept seeing the old list until they cleared browser storage by hand. That is not
+an instruction that can be given to volunteers, and a design that depends on it
+is wrong.
+
+**Mechanics (v4.4):** the local copy is keyed by URL, and each successful load
+deletes every other cached list — including the old fixed-key copy — so anyone
+who tested an earlier version recovers automatically. Verified by simulation:
+stale old-key copy with network up; network down with a local copy; network down
+with none; and a truncated file served with a good local copy.
+
+**Relationship to the freeze.** `FREEZE_PUBLISHED_LISTS` in `scripts/05` still
+guarantees a live URL never changes content during fieldwork. Correctness no
+longer depends on it; it remains good practice.
+
+D-015's description of the cache as "keyed by snapshot" was never accurate. It is
+left as written, per the append-only rule; this entry supersedes it.
+
+---
+
+## D-025 — The tower list is checked once per questionnaire
+
+**2026-09-30 · Provisional (Mark)** · supersedes D-024
+
+The first picker in a browser tab fetches the list with revalidation. Every
+later picker in the same tab uses the stored copy **with no network request**.
+The "session" is the browser tab (`sessionStorage`): it survives QuestionPro's
+page changes and ends when the tab closes.
+
+**Reasoning (Mark's challenge to D-024):** the individual survey shows the
+picker several times, and many towers are rural with poor signal. D-024 made a
+network round trip at *every* picker. The bytes were trivial — a "not modified"
+reply — but the **latency** was not, and on a flaky connection each picker could
+wait out the full timeout before falling back.
+
+**Why per-questionnaire rather than a fixed expiry (e.g. 10 minutes):** a
+questionnaire can outlast any fixed window, so an expiry would force a refetch
+mid-questionnaire — for exactly the slow rural respondent the change is meant
+to protect.
+
+**Timeouts now depend on what failure costs:**
+
+| Situation | Timeout | Why |
+| --- | --- | --- |
+| Nothing stored | 20 s | The alternative is free text, which is worse data than a slow picker. ~80 KB can exceed 8 s on weak 2G/EDGE |
+| Stored copy available | 3 s | The alternative is nearly as good |
+
+**Behaviour on failure:** if the stored copy is used because the network
+failed, the tab is still marked as checked, so a failing connection costs the
+respondent one wait rather than one at every picker. If nothing is stored and
+the fetch fails, the tab is *not* marked, so the next picker tries again.
+
+**Still true from D-024:** nobody is ever asked to clear anything. Stored copies
+are keyed by URL, and each successful load deletes every other stored list. A
+tester who republishes the list opens the survey in a new tab.
+
+**Considered and rejected:** relying on the browser's own HTTP cache, which with
+GitHub Pages' headers would give roughly a 10-minute expiry for free. Rejected
+because it can be evicted without warning and behaves differently in private
+browsing; session storage has predictable, documentable semantics.
+
+**Verified by simulation** across eight cases, including three pickers in one
+questionnaire (one network request in total), a hanging connection with a
+stored copy (one 3-second wait, then none), and recovery for anyone holding the
+pre-v4.4 fixed-key copy.

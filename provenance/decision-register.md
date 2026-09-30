@@ -36,6 +36,8 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-021 | Tower list hosted on GitHub Pages from `cccbr/census2026`; committee informed | Provisional |
 | D-022 | Dove authoritative for bells, not affiliations; association registers prevail, disagreements logged | **Agreed** as working prior — Vicki, Tina |
 | D-023 | Devon and Veronese membership figures not comparable as published | **Agreed** 2026-09-20 |
+| D-024 | ~~Tower list always fetched~~ — superseded by D-025 | Superseded |
+| D-025 | Tower list checked once per questionnaire (browser tab); stored copy used thereafter. Timeouts 20 s with nothing stored, 3 s with a copy | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
