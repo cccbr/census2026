@@ -19,7 +19,7 @@
     // anything on a page collecting census responses. Fetching data means the
     // worst case is bad data, which the checksum catches.
     // The host must send Access-Control-Allow-Origin (jsDelivr does).
-    dataUrl: "__DATA_URL__",
+    dataUrl: "https://raw.githubusercontent.com/Ainsworld/cccbr_census2026/refs/heads/main/towers_dove_2026-09-19.txt",
     debug: true,
     loadTimeoutMs: 8000,
     cacheKey: "ringing_census_towers",
