@@ -18,6 +18,15 @@ source(here::here("scripts", "00_setup.R"))
 
 SNAPSHOT_ID <- "dove_2026-09-19"          # <- change deliberately, never silently
 
+# D-019: international countries in the frame are those with a volunteer
+# present. The list is committed reference data with an owner, not a vector
+# buried in code.
+volunteer_countries <- readr::read_csv(
+  here::here("data", "reference", "frame_countries_with_volunteers.csv"),
+  show_col_types = FALSE
+) |>
+  dplyr::pull(country)
+
 snap <- fs::path(here::here("data", "raw", "dove"),
                  sub("^dove_", "", SNAPSHOT_ID))
 stopifnot(fs::dir_exists(snap))
@@ -80,7 +89,7 @@ stopifnot(!any(is.na(dove$bells)))
 # ---- flags, display, search key ---------------------------------------------
 
 frame <- dove |>
-  add_frame_flags() |>
+  add_frame_flags(volunteer_countries) |>
   dplyr::mutate(
     display = build_display(
       place      = .data$place,
@@ -89,7 +98,8 @@ frame <- dove |>
       ring_name  = .data$ring_name,
       bells      = .data$bells,
       county     = .data$county,
-      country    = .data$country
+      country    = .data$country,
+      is_mini    = .data$ring_type == "Lightweight ring"
     ),
     # Alternative names carry what people actually call the place — "Exmouth"
     # for Withycombe Raleigh. They belong in the search key, never the display.
@@ -103,17 +113,16 @@ frame <- dove |>
 
 # ---- checks -----------------------------------------------------------------
 
+# Expected on dove_2026-09-19: 7262 / 6297 / 5743 / 114 / 5473.
 counts <- tibble::tibble(
-  rule = c("all rows", "ringable", "frame_full", "frame_1988",
-           "  >=4 bells", "  >=5 bells", "  British Isles"),
+  rule = c("all rows", "frame_picklist (all ringable)", "frame_full",
+           "  of which volunteer countries", "frame_1988"),
   n = c(
     nrow(frame),
-    sum(frame$is_ringable),
+    sum(frame$frame_picklist),
     sum(frame$frame_full),
-    sum(frame$frame_1988),
-    sum(frame$frame_full & frame$bells >= 4),
-    sum(frame$frame_full & frame$bells >= 5),
-    sum(frame$frame_full & frame$is_british_isles)
+    sum(frame$frame_full & frame$is_volunteer_country),
+    sum(frame$frame_1988)
   )
 )
 print(counts)
@@ -138,7 +147,7 @@ dups <- frame |>
 if (nrow(dups) > 0) {
   message("\n", nrow(dups), " colliding display strings in the picklist:")
   print(dups |> dplyr::select(ring_id, tower_id, display, bells))
-  message("Expected: 2 (Farnham S Andrew, which has a ring of ten and a 30lb mini ten).")
+  message("Expected: none. The mini-ring marker (D-020) separates Farnham's two rings of ten.")
 }
 
 # ---- write ------------------------------------------------------------------
