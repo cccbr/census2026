@@ -5,6 +5,9 @@ title: "Tower settlement context: exploring the measures"
 ```{r}
 #| label: setup
 #| include: false
+# here() would stop at analysis/, which has its own _quarto.yml. Declaring
+# this file's place in the repo fixes the root at the repository itself.
+here::i_am("analysis/tower-context.qmd")
 source(here::here("scripts", "00_setup.R"))
 library(cluster)   # silhouette widths; ships with R
 
@@ -120,28 +123,134 @@ tw <- frame |>
 n_missing_context <- sum(frame$frame_full) - sum(frame$frame_full & frame$tower_id %in% context$tower_id)
 ```
 
-This chapter looks at how the settlement measures from `scripts/08` vary and
-covary across the `r fmt(nrow(tw))` frame towers on snapshot
-`r FRAME_SNAPSHOT`. The aim is to choose a small set of classes or scales to
-stratify the chased sample by, and to have something concrete for the
-analytical team to calibrate, validate and name.
+*Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
+and made the decisions; Claude drafted the code and text, which Mark
+reviewed.*
 
-Nothing here is a decision. The choices at the top of the source are
-starting points.
+## Background and brief
 
-::: {.callout-note}
-**What the measures are (D-026).** For each tower:
+**The question.** The census will chase about 1,000 randomly drawn towers
+until each one replies. Comparing them with towers that reply unprompted
+shows who does not respond, and lets the estimates correct for it. The draw
+is to be stratified by number of bells and by how urban or rural a tower is.
+This chapter is about the second of those: how to describe "urban" and
+"rural" well enough to stratify by.
 
-- `k<h>km` is an exponential kernel whose weight halves every *h* km. 2 km is
-  the prior mode for a local catchment.
-- `r<d>km` is a plain count within *d* km.
-- `pop_` is resident population from GHSL, `towers_` and `bells_` count
-  frame towers and bells (the tower itself included), and `pop_per_bell_`
-  is the ratio.
-- A Huff-type allocation that splits population between competing towers
-  was considered and deferred (D-026). The ratios here measure competition
-  at the tower, not at the resident.
-:::
+**Starting points Mark set out.**
+
+- *Urban is not one thing.* At least three different effects are mixed
+  together:
+  - the size of the settlement, which sets how many people live near enough
+    to ring;
+  - large towns have fewer towers than their size suggests, because of how
+    churches with bells came to be built, except in conurbations made of
+    villages that grew together, which have many;
+  - city centres, especially the City of London, have towers with almost no
+    residents, rung by society bands such as the College Youths and the
+    Cumberlands.
+- *It should work outside England without rework*, even though the
+  dynamics abroad are probably different.
+- *Measure around each tower, not by area.* Ready-made area classifications
+  such as the ONS Rural Urban Classification are included for comparison, but
+  are not expected to be the answer.
+- *Use distance decay, not just circles.* A circle of fixed radius gives
+  full weight just inside its edge and none just outside. A decay kernel
+  avoids that cliff. Plain circles are computed too, because they are easier
+  to explain.
+- *Competition matters as much as distance.* From gravity models of retail
+  catchments: nearby rival destinations shrink a catchment more than a
+  steeper fall-off with distance does. The ratio of people to towers, or to
+  bells, stands in for that competition. A fuller model that splits each
+  person's pull between competing towers (a Huff model) was considered and
+  set aside as more complex than needed for now.
+- *Bells matter for parity.* Ringers feel some obligation to ring, and a
+  band much bigger than its ring of bells means people sitting out at
+  practice. That pushes the number of ringers towards the number of bells,
+  so people per bell is as relevant as people per tower.
+
+**What this chapter is for.** To see how the measures vary and move
+together, so that sensible boundaries can be drawn. A named classification
+is wanted for communication, and the analytical team are expected to
+calibrate, test and name it. Nothing here is a decision. The choices at the
+top of the source are starting points.
+
+**Out of scope.** Choosing the final strata, and the sampling method itself.
+
+## What the measures are
+
+For each tower, script 08 counts three things nearby: **people** (resident
+population from the EU's Global Human Settlement Layer), **towers** and
+**bells** (both from the sampling frame, the tower itself included). It
+counts them in two ways:
+
+- **Decay kernels**, named `k1km` to `k8km`. Nearer things count more, and
+  the weight halves every 1, 2, 4 or 8 km. The 2 km kernel is the main one.
+  Its scale comes from published travel data for weekly voluntary activities,
+  such as swimming and church attendance, which imply a half-distance of
+  about 1.5–2.3 km.
+- **Plain circles**, named `r1km` to `r10km`. Everything within the radius
+  counts equally.
+
+Ratios follow: **people per tower** and **people per bell**. Columns are
+named by what they count and how, for example `pop_k2km` or
+`pop_per_bell_r5km`.
+
+```{r}
+#| label: headline
+#| include: false
+# Computed early so the headline findings below are live numbers.
+
+# Kernels against circles
+pop_mat <- tw |> dplyr::select(dplyr::all_of(paste0("pop_", measures)))
+rho  <- stats::cor(pop_mat, method = "spearman")
+kern <- paste0("pop_", grep("^k", measures, value = TRUE))
+rad  <- paste0("pop_", grep("^r", measures, value = TRUE))
+best_radius <- tibble::tibble(kernel = kern) |>
+  dplyr::mutate(
+    best_radius = rad[apply(rho[kern, rad, drop = FALSE], 1, which.max)],
+    spearman    = round(apply(rho[kern, rad, drop = FALSE], 1, max), 3)
+  )
+k2 <- dplyr::filter(best_radius, .data$kernel == "pop_k2km")
+
+# Principal components
+X <- tw |>
+  dplyr::select(dplyr::all_of(CLUSTER_VARS)) |>
+  dplyr::mutate(dplyr::across(dplyr::everything(), lg)) |>
+  scale()
+pca <- stats::prcomp(X)
+scores <- as.data.frame(pca$x[, 1:N_PCS])
+var_share <- pca$sdev^2 / sum(pca$sdev^2)
+pc1_all_same_sign <- length(unique(sign(pca$rotation[, 1]))) == 1
+pc2_top <- names(sort(abs(pca$rotation[, 2]), decreasing = TRUE))[1:2]
+
+# Clusters and silhouettes
+km_fits <- purrr::map(K_RANGE, \(k) stats::kmeans(scores, centers = k, nstart = 50, iter.max = 100))
+sil_idx <- sample(nrow(scores), min(2500, nrow(scores)))
+d_sub   <- stats::dist(scores[sil_idx, ])
+sil_by_k <- purrr::map_dbl(km_fits, \(f)
+  mean(cluster::silhouette(f$cluster[sil_idx], d_sub)[, "sil_width"]))
+k_best <- K_RANGE[which.max(sil_by_k)]
+
+pct <- scales::label_percent(accuracy = 1)
+rural_share <- mean(tw$smod_class %in% c("Very low density rural", "Low density rural",
+                                         "Rural cluster"))
+```
+
+## Headline findings
+
+- **The towers do not fall into natural groups.** A silhouette score
+  measures how cleanly a clustering separates the data, from −1 to 1. The
+  best here is `r round(max(sil_by_k), 2)`, at k = `r k_best`.
+  `r if (max(sil_by_k) < 0.5) "That is below the 0.5 usually taken as clear structure, so any classes are a convenience for communication, not a discovery." else "That is above the 0.5 usually taken as clear structure, so the groups may be real."`
+- **Two dimensions carry `r pct(sum(var_share[1:2]))` of the variation.**
+  `r if (pc1_all_same_sign) "The first moves with every measure at once, so it is overall size." else "The first does not move with every measure, so read its loadings before calling it size."`
+  The second is driven mostly by `r pc2_top[1]` and `r pc2_top[2]`.
+- **The circles track the kernels closely.** The 2 km kernel ranks towers
+  almost exactly as the `r sub("pop_", "", k2$best_radius)` circle does (rank
+  correlation `r k2$spearman`). So in a meeting the 2 km kernel can be
+  described as "people within about 5 km, nearer ones counting more".
+- **`r pct(rural_share)` of frame towers** sit in the three rural classes of
+  the international Degree of Urbanisation.
 
 ## Coverage
 
@@ -212,17 +321,7 @@ weight from within about 5 km. To a meeting, describe the 2 km kernel as
 
 ```{r}
 #| label: tbl-kernel-radius
-pop_mat <- tw |> dplyr::select(dplyr::all_of(paste0("pop_", measures)))
-rho <- stats::cor(pop_mat, method = "spearman")
-kern <- paste0("pop_", grep("^k", measures, value = TRUE))
-rad  <- paste0("pop_", grep("^r", measures, value = TRUE))
-
-tibble::tibble(kernel = kern) |>
-  dplyr::mutate(
-    best_radius = rad[apply(rho[kern, rad, drop = FALSE], 1, which.max)],
-    spearman    = round(apply(rho[kern, rad, drop = FALSE], 1, max), 3)
-  ) |>
-  knitr::kable()
+best_radius |> knitr::kable()
 ```
 
 ```{r}
@@ -386,18 +485,12 @@ tw |>
 
 ## Principal components
 
-Principal components on the standardised logs of the clustering variables.
-If the first component is "size" and the second is "local against wider",
-the plane above already holds most of the information.
+Principal components boil the six clustering measures (logged and
+standardised) down to a few combined scores. The loadings table shows which
+measures drive each score, which is how to name it.
 
 ```{r}
 #| label: pca
-X <- tw |>
-  dplyr::select(dplyr::all_of(CLUSTER_VARS)) |>
-  dplyr::mutate(dplyr::across(dplyr::everything(), lg)) |>
-  scale()
-pca <- stats::prcomp(X)
-
 tibble::tibble(
   component = paste0("PC", seq_along(pca$sdev)),
   variance  = scales::percent(pca$sdev^2 / sum(pca$sdev^2), 0.1),
@@ -413,7 +506,6 @@ round(pca$rotation[, 1:min(4, ncol(X))], 2) |>
 #| label: fig-pca
 #| fig-height: 6
 #| fig-cap: "Towers on the first two components, coloured by Degree of Urbanisation."
-scores <- as.data.frame(pca$x[, 1:N_PCS])
 ggplot(dplyr::bind_cols(tw, scores), aes(PC1, PC2, colour = smod_class)) +
   geom_point(size = 0.8, alpha = 0.6) +
   scale_colour_manual(values = PAL_SMOD, drop = TRUE, name = NULL) +
@@ -431,15 +523,10 @@ explained.
 #| label: fig-k
 #| fig-height: 3.5
 #| fig-cap: "Within-cluster sum of squares and mean silhouette width by k (silhouette on a random 2,500 towers)."
-km_fits <- purrr::map(K_RANGE, \(k) stats::kmeans(scores, centers = k, nstart = 50, iter.max = 100))
-sil_idx <- sample(nrow(scores), min(2500, nrow(scores)))
-d_sub   <- stats::dist(scores[sil_idx, ])
-
 k_diag <- tibble::tibble(
   k = K_RANGE,
   within_ss = purrr::map_dbl(km_fits, "tot.withinss"),
-  silhouette = purrr::map_dbl(km_fits, \(f)
-    mean(cluster::silhouette(f$cluster[sil_idx], d_sub)[, "sil_width"]))
+  silhouette = sil_by_k
 ) |>
   tidyr::pivot_longer(-"k") |>
   dplyr::mutate(name = dplyr::recode(.data$name,

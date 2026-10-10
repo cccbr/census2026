@@ -5,6 +5,9 @@ title: "Ringing Census 2026 — Analysis"
 ```{r}
 #| label: setup
 #| include: false
+# here() would stop at analysis/, which has its own _quarto.yml. Declaring
+# this file's place in the repo fixes the root at the repository itself.
+here::i_am("analysis/index.qmd")
 source(here::here("scripts", "00_setup.R"))
 ```
 
