@@ -10,6 +10,10 @@
 #               About 34 MB.
 #   ons_oa_ruc  ONS Output Areas (Dec 2021) BGC V2 with the 2021 Rural Urban
 #               Classification attached. England and Wales only.
+#   ghsl_land   GHS-LAND R2022A, land surface per 100 m cell (epoch 2018, the
+#               only one published). Same tile grid as ghsl_pop. Used to turn
+#               population into people per km2 of LAND, and to measure how much
+#               of a tower's catchment is sea.
 #
 # Each source lands in data/raw/<source>/<date>/ and gets one fetch_log row
 # per file, as Dove does. Zips are stored as fetched. Unzipping happens in
@@ -20,7 +24,7 @@
 # LICENCES
 #   GHSL: (c) European Union. "Reuse is authorised, provided the source is
 #   acknowledged." Cite Schiavina et al. (2023) GHS-POP R2023A and
-#   GHS-SMOD R2023A.
+#   GHS-SMOD R2023A, and GHS-LAND R2022A.
 #   ONS boundaries: Open Government Licence v3; contains OS data (c) Crown
 #   copyright and database right.
 
@@ -41,6 +45,12 @@ GHSL_EPOCH <- "E2020"
 # (D-026).
 MAX_HALF_DISTANCE_M <- 8000
 
+# Which sources this run fetches. Each fetch makes a new dated snapshot and
+# refuses to overwrite one taken earlier the same day, so name only what is
+# needed. All four were wanted on first use. On 2026-10-10 pop, smod and ons
+# were already fetched, so only ghsl_land was still needed.
+SOURCES_TO_FETCH <- c("ghsl_land")
+
 fetch_date <- Sys.Date()
 UA <- "CCCBR Ringing Census 2026 (https://github.com/cccbr/ringing-census-2026)"
 
@@ -51,6 +61,13 @@ GHSL_ROOT <- "https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/GHSL"
 ghsl_pop_tile_url <- function(tile, epoch = GHSL_EPOCH) {
   stem <- paste0("GHS_POP_", epoch, "_GLOBE_R2023A_54009_100")
   paste0(GHSL_ROOT, "/GHS_POP_GLOBE_R2023A/", stem, "/V1-0/tiles/",
+         stem, "_V1_0_", tile, ".zip")
+}
+
+# Land has a single epoch (2018) and a different release (R2022A).
+ghsl_land_tile_url <- function(tile) {
+  stem <- "GHS_LAND_E2018_GLOBE_R2022A_54009_100"
+  paste0(GHSL_ROOT, "/GHS_LAND_GLOBE_R2022A/", stem, "/V1-0/tiles/",
          stem, "_V1_0_", tile, ".zip")
 }
 
@@ -108,7 +125,7 @@ tiles <- purrr::map2(in_scope$lon, in_scope$lat, \(x, y) {
   unique() |>
   sort()
 
-message(length(tiles), " GHSL population tiles needed: ",
+message(length(tiles), " GHSL tiles needed (population and land share a grid): ",
         paste(tiles, collapse = ", "))
 
 # ---- fetch helper -----------------------------------------------------------
@@ -180,51 +197,83 @@ record <- function(manifest, dest, extra = list()) {
   print(manifest |> dplyr::select(file, http_status, bytes))
 }
 
+fetched <- list()
+
 # ---- GHSL population tiles --------------------------------------------------
 
-src  <- "ghsl_pop"
-sid  <- paste0(src, "_", GHSL_EPOCH, "_", format(fetch_date, "%Y-%m-%d"))
-dest <- new_snapshot_dir(src)
+if ("ghsl_pop" %in% SOURCES_TO_FETCH) {
+  src  <- "ghsl_pop"
+  sid  <- paste0(src, "_", GHSL_EPOCH, "_", format(fetch_date, "%Y-%m-%d"))
+  dest <- new_snapshot_dir(src)
 
-pop_manifest <- purrr::map(tiles, \(t) {
-  url <- ghsl_pop_tile_url(t)
-  fetch_file(url, fs::path(dest, fs::path_file(url)), sid, src, allow_404 = TRUE)
-}) |>
-  purrr::list_rbind()
+  pop_manifest <- purrr::map(tiles, \(t) {
+    url <- ghsl_pop_tile_url(t)
+    fetch_file(url, fs::path(dest, fs::path_file(url)), sid, src, allow_404 = TRUE)
+  }) |>
+    purrr::list_rbind()
 
-record(pop_manifest, dest, extra = list(
-  epoch = GHSL_EPOCH,
-  tiles_requested = tiles,
-  tiles_chosen_from = FRAME_SNAPSHOT,
-  max_half_distance_m = MAX_HALF_DISTANCE_M
-))
+  record(pop_manifest, dest, extra = list(
+    epoch = GHSL_EPOCH,
+    tiles_requested = tiles,
+    tiles_chosen_from = FRAME_SNAPSHOT,
+    max_half_distance_m = MAX_HALF_DISTANCE_M
+  ))
+  fetched$ghsl_pop <- sid
+}
+
+# ---- GHSL land --------------------------------------------------------------
+
+if ("ghsl_land" %in% SOURCES_TO_FETCH) {
+  src  <- "ghsl_land"
+  sid  <- paste0(src, "_E2018_", format(fetch_date, "%Y-%m-%d"))
+  dest <- new_snapshot_dir(src)
+
+  land_manifest <- purrr::map(tiles, \(t) {
+    url <- ghsl_land_tile_url(t)
+    fetch_file(url, fs::path(dest, fs::path_file(url)), sid, src, allow_404 = TRUE)
+  }) |>
+    purrr::list_rbind()
+
+  record(land_manifest, dest, extra = list(
+    epoch = "E2018",
+    tiles_requested = tiles,
+    tiles_chosen_from = FRAME_SNAPSHOT,
+    max_half_distance_m = MAX_HALF_DISTANCE_M
+  ))
+  fetched$ghsl_land <- sid
+}
 
 # ---- GHSL SMOD --------------------------------------------------------------
 
-src  <- "ghsl_smod"
-sid  <- paste0(src, "_", GHSL_EPOCH, "_", format(fetch_date, "%Y-%m-%d"))
-dest <- new_snapshot_dir(src)
+if ("ghsl_smod" %in% SOURCES_TO_FETCH) {
+  src  <- "ghsl_smod"
+  sid  <- paste0(src, "_", GHSL_EPOCH, "_", format(fetch_date, "%Y-%m-%d"))
+  dest <- new_snapshot_dir(src)
 
-smod_manifest <- fetch_file(
-  GHSL_SMOD_URL, fs::path(dest, fs::path_file(GHSL_SMOD_URL)), sid, src
-)
-record(smod_manifest, dest, extra = list(epoch = GHSL_EPOCH))
+  smod_manifest <- fetch_file(
+    GHSL_SMOD_URL, fs::path(dest, fs::path_file(GHSL_SMOD_URL)), sid, src
+  )
+  record(smod_manifest, dest, extra = list(epoch = GHSL_EPOCH))
+  fetched$ghsl_smod <- sid
+}
 
 # ---- ONS OA 2021 boundaries + RUC 2021 --------------------------------------
 
-src  <- "ons_oa_ruc"
-sid  <- paste0(src, "_", format(fetch_date, "%Y-%m-%d"))
-dest <- new_snapshot_dir(src)
+if ("ons_oa_ruc" %in% SOURCES_TO_FETCH) {
+  src  <- "ons_oa_ruc"
+  sid  <- paste0(src, "_", format(fetch_date, "%Y-%m-%d"))
+  dest <- new_snapshot_dir(src)
 
-ons_manifest <- fetch_file(
-  ONS_OA_RUC_URL, fs::path(dest, "OA_2021_EW_BGC_V2_RUC.zip"), sid, src
-)
-record(ons_manifest, dest)
+  ons_manifest <- fetch_file(
+    ONS_OA_RUC_URL, fs::path(dest, "OA_2021_EW_BGC_V2_RUC.zip"), sid, src
+  )
+  record(ons_manifest, dest)
+  fetched$ons_oa_ruc <- sid
+}
 
 message(
   "\nDone. Snapshot ids:\n  ",
-  paste(unique(c(pop_manifest$snapshot_id, smod_manifest$snapshot_id,
-                 ons_manifest$snapshot_id)), collapse = "\n  "),
+  paste(unlist(fetched), collapse = "\n  "),
   "\n\nNEXT: commit provenance/fetch_log.csv, then set these ids at the top of",
   " scripts/08_build_tower_context.R"
 )
