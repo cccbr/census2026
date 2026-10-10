@@ -131,6 +131,85 @@ anticipation of a need that has not arrived.
 
 ---
 
+## Writing for people
+
+Everything written here for a human reader follows these rules. That covers
+READMEs, Quarto chapters, reports, decision entries and messages to Mark. The
+readers are mixed: committee delegates, volunteer analysts, Bryn in Python,
+and whoever re-runs this in 2030. Most are not statisticians, and none of them
+were in the conversation where a choice was made.
+
+**Lead with the answer.** The first two sentences say what the thing is, what
+was found, or what to do. Context comes after.
+
+**One idea per sentence.** Vary the length: a short sentence for a
+conclusion, a longer one for the reasoning behind it. Prefer plain words:
+"use" not "utilise", "find" not "ascertain".
+
+**Name the actor before the action.** "Script 08 drops these towers", not
+"these towers are dropped".
+
+**Be concrete.** Numbers, names, commands and failure conditions, not
+adjectives. "Takes about 25 minutes", not "is somewhat slow".
+
+**Make each section stand on its own.** People read the part they need and
+skip the rest, and they will not follow a trail of links. Restate the point
+where it is needed, briefly, rather than writing "see above", "as discussed"
+or "see D-026". A pointer such as a decision ID or file name may *follow* the
+restated point, as a reference. It never replaces it. (Code comments are the
+exception: there, citing the decision ID at the point it is encoded is the
+convention.)
+
+**Define a technical term where it first appears, in that section.** Then
+use the same term every time.
+
+**Headings say the point.** "Two dimensions carry 90% of the variation", not
+"Results".
+
+**Use a table to compare three or more things.** Not three paragraphs.
+
+**Keep the reasoning.** Be brief in framing, thorough in the *why*. A choice
+written without its reason cannot be defended to a delegate.
+
+**Leave out:** preambles that restate what the reader knows; "in this
+section", "it is important to note"; closing summaries that repeat the body;
+hedges on things that are not uncertain. Say real uncertainty once, plainly.
+
+**For anything others will read, do a second pass** purely for flow and
+clarity before handing it over.
+
+An example of the difference:
+
+> *Dense:* Given the absence of discernible multimodality in the joint
+> distribution of the settlement metrics, as evidenced by uniformly low mean
+> silhouette widths across the evaluated k range, any partitioning should be
+> regarded as conventional rather than empirically grounded.
+>
+> *Clear:* The towers do not fall into natural groups. A silhouette score
+> measures how cleanly a clustering separates the data, and ours never rose
+> above 0.32, well below the 0.5 usually taken as clear structure. Any classes
+> we draw are a convenience for communication, not a discovery.
+
+### Reports and analysis chapters: required opening
+
+Every report, Quarto chapter or analysis document opens with three things,
+in this order:
+
+1. **Authorship.** One sentence: "Prepared by Mark Ainsworth with Claude
+   (Anthropic). Mark set the questions and made the decisions; Claude drafted
+   the code and text, which Mark reviewed." Adjust the wording if the split of
+   work was different.
+2. **Background and brief.** The question being answered and why it
+   matters. Then the guidance, constraints and starting assumptions Mark gave,
+   restated plainly in the document's own words, not quoted from a
+   conversation. Then what was decided before the work began, and what is out
+   of scope. A reader who missed every conversation must be able to follow the
+   rest.
+3. **Headline findings.** Three to six bullets, computed in the document
+   where possible so they stay true when the data changes.
+
+---
+
 ## Working with renv
 
 Mark does not use renv daily. **Sessions should actively keep the project
@@ -350,26 +429,26 @@ Traps already hit once, worth not hitting again:
 
 ---
 
-## Current state (19 September 2026)
+## Current state (10 October 2026)
 
-Skeleton in place. Git initialised, no commits yet. Not yet pushed — CCCBR
-org membership pending, so `origin` is unset.
+Pushed to `cccbr/census2026`; the pre-commit hook is installed. The frame
+(`frame_dove_2026-09-19`) and the questionnaire tower list are built.
 
-Outstanding, roughly in order:
+Settlement context is in progress, toward choosing how to stratify the chased
+sample (Q-023, needed before the draw):
 
-1. `renv::init()` is **incomplete** — `renv/settings.json` exists but there is
-   no `renv.lock` and no `.Rprofile`, so renv is not active. Finish it.
-2. `analysis/` and `reports/` are empty — the Quarto sub-project configs have
-   not been added.
-3. `LICENSE` is absent. Add via GitHub's Apache-2.0 template.
-4. Install the pre-commit hook: `git config core.hooksPath .githooks`.
-5. Set `git config user.email` before the first commit — every commit carries
-   it in perpetuity and the repo is destined for a CCCBR org.
-6. `scripts/03–05` (society crosswalk, frame build, questionnaire export) are
-   not written. Blocked on D-004 and D-010 in the register.
-7. The QuestionPro autocomplete widget has no documentation in this repo and
-   the source is not held here.
+- Script 06 builds tower locations. Script 07 fetches GHSL population, GHSL
+  Degree of Urbanisation, GHSL land and ONS RUC 2021 (all snapshots dated
+  2026-10-10). Script 08 builds `tower_context_dove_2026-09-19.parquet`.
+- `analysis/tower-context.qmd` explores the measures. A follow-on chapter is
+  planned: bell-anchored class boundaries, density and isolation measures,
+  and a simulation comparing sampling designs (cell stratification, sorted
+  systematic, local pivotal).
+- A draft special-case tower list (81 rows, all `proposed`) is in
+  `data/reference/special_towers_draft.csv` (Q-022).
 
-Done since: Dove snapshot `dove_2026-09-19` fetched and logged (7,262 /
-15,720 / 1,131 rows); society membership table and its metadata in
-`data/reference/`; decision log and register established.
+Still outstanding:
+
+- `scripts/03` (society crosswalk) is not written; it waits on Q-006.
+- The QuestionPro widget documentation lives in `inst/questionnaire/`; its
+  build products are gitignored.

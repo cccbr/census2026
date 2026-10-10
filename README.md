@@ -1,165 +1,218 @@
 # Ringing Census 2026
 
-Analysis code for the 2026 Ringing Census — a two-stage survey of the
-bellringing population, run under Ringing 2030 by the Central Council of Church
-Bell Ringers. The first such census since 1988.
+This repository holds the code for the 2026 Ringing Census. It builds the
+sampling frame of towers, publishes the tower list the questionnaire uses,
+prepares the settlement measures that guide the sample, and will hold the
+analysis. It never holds survey responses.
 
-This repository holds **code, method and provenance records**. It holds no
-survey response data and never will.
+The census is run by the Central Council of Church Bell Ringers (CCCBR) under
+Ringing 2030. It is the first count of the bellringing population since 1988.
+The reference week is 16–22 November 2026.
 
----
-
-## Licensing
-
-There are two licences here and they cover different things.
-
-### Code
-
-Apache-2.0 (see `LICENSE`). Chosen over MIT for §5, which makes every
-contribution licensed under the same terms by default — useful for a volunteer
-project with no CLA process.
-
-> **Add the licence via GitHub's own template** (Add file → Choose a license
-> template → Apache License 2.0). Hand-transcribed licence text is a bad idea;
-> the template inserts the canonical wording and the right copyright line.
-
-### Data
-
-Dove's Guide data is **CC BY-SA 4.0**. From
-<https://dove.cccbr.org.uk/downloads>:
-
-> "you must give appropriate credit, provide a link to the licence, and
-> indicate if changes were made"
-
-> "If you remix, transform, or build upon the data, you must distribute your
-> contributions under the same license as the original."
-
-Three consequences:
-
-1. **Attribution is required wherever a Dove extract is redistributed** —
-   including the tower array embedded in the questionnaire. The required text
-   is `DOVE_ATTRIBUTION` in `scripts/00_setup.R`. It must appear in the
-   survey's about/privacy text, not only in this repo.
-
-2. **The ShareAlike scope is an open legal question and needs answering before
-   publication.** CC BY-SA 4.0 §4 extends to sui generis database rights, and
-   extracting a substantial portion produces "adapted material". Aggregate
-   population estimates computed *using* Dove as a frame are probably not an
-   adaptation; a published tower-level dataset carrying Dove fields very likely
-   is, and would have to be released CC BY-SA 4.0. This is not settled here —
-   it goes to the project's legal/DP sign-off alongside the DPIA.
-
-3. **The code licence is unaffected.** Code that reads a CC BY-SA database is
-   not a derivative of it.
+*Written by Mark Ainsworth with Claude (Anthropic). Mark sets the direction
+and makes the decisions; Claude drafts much of the code and text, which Mark
+reviews.*
 
 ---
 
-## The data contract
+## Getting started
 
+You need R 4.6 or later, Quarto, and git. From the repository root:
+
+```r
+renv::restore()                          # install the exact package versions
 ```
-data/raw/        NOT COMMITTED   immutable, dated, checksummed snapshots
-data/interim/    NOT COMMITTED   derived, disposable
-data/curated/    NOT COMMITTED   parquet — the frame, the analysis tables
-data/reference/  COMMITTED       hand-curated lookups: part of the method
-provenance/      COMMITTED       fetch log, schema notes — the audit trail
-```
-
-**Parquet is the durable artefact and the interchange format.** R via `arrow`,
-Python via `pyarrow`. No database is required at this scale — 7,262 towers is
-a tibble, not a data warehouse. DuckDB reads Parquet natively, so adopting it
-later for the reporting layer costs nothing and requires no migration. If a
-`.duckdb` file ever exists it is a build artefact, rebuilt from scripts,
-never committed.
-
-**The audit trail is committed; the data is not.** `provenance/fetch_log.csv`
-records the URL, timestamp, SHA-256, byte count and row count of every raw
-fetch. Anyone can verify a snapshot from this repo alone without the repo ever
-containing the data. Every curated artefact carries a `.json` sidecar naming
-the snapshot and script it came from. If you cannot answer "which snapshot is
-this number from?", the number is not defensible to a sceptical delegate.
-
-### Freezing the frame
-
-Dove changes continuously. The sampling frame must be a **stated snapshot,
-frozen on a stated date**. If the frame drifts between building the
-questionnaire picklist and running the analysis, responses cannot be reliably
-matched to frame rows and the denominator moves. Scripts name the snapshot they
-use explicitly; nothing silently picks "the latest".
-
-### Personal data
-
-No survey response data enters this repository, at any stage, in any form,
-including in a branch, including temporarily, including "just to debug it".
-Git history is effectively permanent and a single such commit is a reportable
-breach.
-
-This is enforced mechanically rather than by discipline. Install the hook once
-per clone:
 
 ```bash
-git config core.hooksPath .githooks
+git config core.hooksPath .githooks      # turn on the safety checks
 ```
 
-It blocks files over 1 MiB, anything under `data/` outside `reference/`, and
-text files carrying personal-data-shaped column names.
+Then run the scripts in order, as described below. Each script that fetches
+data needs network access, and each takes a dated snapshot, so re-running one
+on the same day stops rather than overwriting.
 
 ---
 
-## Repository conventions
+## The pipeline, script by script
 
-```
-R/            Functions ONLY. No side effects, nothing runs on source().
-scripts/      Numbered, run top-to-bottom, interactive-friendly. All side
-              effects live here.
-analysis/     Quarto — the analytical narrative.
-reports/      Parameterised Quarto: one report per association.
-inst/         Generated assets (the questionnaire tower array).
-provenance/   Committed audit trail.
-```
+Scripts live in `scripts/` and are numbered in the order they run. Each one
+names the data snapshot it uses at the top. None of them silently picks "the
+latest".
 
-The rule that makes this work: **if a function in `R/` reads a file path or
-writes to disk, it is in the wrong place.** Keeping `R/` pure also means the
-scripts can be lifted into `targets` later without rewriting anything, should
-the "is this artefact current?" question ever start to hurt.
+| Script | What it does | Writes | Time |
+| --- | --- | --- | --- |
+| `00_setup.R` | Loads packages and the functions in `R/`. Every script starts by sourcing it | — | seconds |
+| `01_fetch_dove.R` | Downloads Dove's Guide, the tower database | `data/raw/dove/<date>/`, a row in the fetch log | 1 min |
+| `02_profile_dove.R` | Records the columns Dove actually had, so a change in Dove shows up in a diff | `provenance/dove_schema_<snapshot>.md` | seconds |
+| `03` | Society crosswalk. **Not yet written** | — | — |
+| `04_build_frame.R` | Builds the frame: one row per ring of bells, with flags for each frame definition | `data/curated/frame_<snapshot>.parquet` | seconds |
+| `05_export_questionnaire_towers.R` | Publishes the tower list the questionnaire's search box fetches | `docs/` (served by GitHub Pages) | seconds |
+| `06_build_tower_locations.R` | One row per tower with its coordinates | `data/curated/tower_locations_<snapshot>.parquet` | seconds |
+| `07_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
+| `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–30 min |
 
-Abstraction into functions is for genuinely reused or genuinely looped things —
-not for wrapping a line you call once.
+### What the settlement measures are
 
-### Style
+Script 08 describes the area around each tower in two ways.
 
-- Native pipe `|>` only.
-- Tidyverse conventions.
-- Reference Dove columns **by name, never by position**. Dove states the field
-  order may change.
+- **A decay kernel** counts people, towers or bells, giving nearer ones more
+  weight. The weight halves every 1, 2, 4 or 8 km depending on the version.
+  The 2 km version is the main one, chosen from published data on how far
+  people travel to weekly voluntary activities.
+- **A plain circle** counts everything within 1, 2, 5 or 10 km. It is easier
+  to explain, but its edge is arbitrary.
 
-### Reproducibility
+From these it derives people per tower, people per bell, people per km² of
+land, and how much of the area is sea. It also records two ready-made
+urban–rural classes for comparison: the international Degree of Urbanisation
+(from the EU's Global Human Settlement Layer) and, for England and Wales, the
+ONS 2021 Rural Urban Classification.
 
-`renv` from the first commit. A census that cannot be re-run in 2030 to compare
-with 2026 has failed its own comparability requirement.
-
-```r
-renv::init()      # once
-renv::snapshot()  # after adding a dependency
-renv::restore()   # on a fresh clone
-```
-
----
-
-## Running it
-
-```r
-source("scripts/01_fetch_dove.R")     # immutable snapshot + provenance
-source("scripts/02_profile_dove.R")   # schema note -> provenance/
-# 03-05 follow once the schema note is in hand
-```
-
-Note: `01` needs network access. It will not run in a sandboxed environment
-whose egress policy blocks `dove.cccbr.org.uk`.
+The reasoning, and the alternatives considered, are in decision D-026 in
+`provenance/decisions.md`.
 
 ---
 
-## Attribution
+## Where data lives, and what is committed
 
-Tower data from Dove's Guide for Church Bell Ringers
-(<https://dove.cccbr.org.uk>), © the Central Council of Church Bell Ringers,
-licensed CC BY-SA 4.0.
+| Folder | Committed? | What it holds |
+| --- | --- | --- |
+| `data/raw/` | No | Downloads exactly as received, in dated folders. Never edited |
+| `data/interim/` | No | Unzipped and intermediate files. Safe to delete; scripts rebuild them |
+| `data/curated/` | No | The tables the analysis uses, as Parquet files |
+| `data/reference/` | **Yes** | Small hand-checked tables that are part of the method, such as the draft special-case tower list |
+| `provenance/` | **Yes** | The audit trail: fetch log, schema notes, decision log |
+| `docs/` | **Yes** | The published tower list, exactly as respondents receive it |
+
+**Why the data is not committed but its description is.** Every download adds
+a row to `provenance/fetch_log.csv` with its address, time, size and SHA-256
+checksum. Anyone holding a copy of a snapshot can prove it is the one used,
+without the data ever entering git. Every curated table also has a `.json`
+file beside it naming the snapshots and script that made it. The test for any
+published number is "which snapshot is this from?", and these records answer
+it.
+
+**Why snapshots are frozen.** Dove changes every week. If the frame shifted
+between building the questionnaire list and analysing the replies, replies
+could not be matched to towers and the denominator would move.
+
+**Parquet** is the storage format: R reads it with `arrow`, Python with
+`pyarrow`. At about 7,300 rings no database is needed.
+
+### No survey responses, ever
+
+No survey response data enters this repository: not in a branch, not briefly,
+not "just to debug". Git keeps history permanently, and one such commit would
+be a reportable personal data breach. The pre-commit hook in `.githooks/`
+blocks files over 1 MiB, anything under `data/` outside `data/reference/`, and
+files with personal-data column names. Do not bypass it.
+
+---
+
+## Analysis and reports
+
+Both are Quarto projects, each in its own folder with its own `_quarto.yml`.
+
+- **`analysis/`** is the analytical narrative, rendered as a book. Render it
+  with `quarto render analysis/`. It caches results in `analysis/_freeze/`, so
+  only changed chapters re-run.
+- **`reports/`** will produce one report per ringing association, from one
+  template. It never caches, because a cached run would show one
+  association's numbers under another's name.
+
+Rendered output and caches (`_output/`, `_freeze/`) are not committed. They
+contain computed results, and they can always be rebuilt from code plus the
+named snapshots.
+
+Two set-up details make rendering work, because Quarto runs R from inside
+each folder rather than the repository root:
+
+- Each folder has an `.Rprofile` that switches on the project's renv library.
+  Without it, R cannot find `knitr` or `rmarkdown`.
+- Each chapter starts with `here::i_am("analysis/<file>.qmd")`, so file paths
+  resolve from the repository root.
+
+---
+
+## Decisions: where to find what was decided
+
+Two files in `provenance/` record decisions.
+
+- **`decisions.md`** is the history. Each entry gives the decision, its
+  status, the alternatives and the reasoning. Entries are never edited; a
+  changed decision gets a new entry.
+- **`decision-register.md`** is the current state, plus every question still
+  open.
+
+Each decision has one of four statuses:
+
+| Status | Meaning |
+| --- | --- |
+| Provisional | Mark's working decision, made to allow progress |
+| Agreed | Ratified by the project team, who are named |
+| Open | Identified, not yet decided |
+| Superseded | Replaced by a named later entry |
+
+Code cites the decision it encodes, for example `# D-017` beside the rule
+for four or more bells, so the reason is one search away.
+
+---
+
+## Code conventions
+
+- `R/` holds functions only. Nothing in it runs when sourced, reads a file or
+  writes to disk. Anything with side effects belongs in `scripts/`.
+- Native pipe `|>`, tidyverse style, `here::here()` for every path.
+- Dove's columns are always referred to by name. Dove warns that their order
+  may change.
+- Comments explain *why*. Most odd-looking choices have a methodological
+  reason, recorded where the choice is made.
+
+Contributors using Claude will find more detailed working rules in
+`CLAUDE.md`, including how prose in this repository should be written.
+
+---
+
+## Things that have gone wrong before
+
+| Problem | Fix |
+| --- | --- |
+| The repository was inside OneDrive, which corrupted git and renv | Keep it outside synced folders. It now lives at `C:\Users\mark\dev\ringing-census-2026` |
+| A new R version could not install packages | Create the user library folder, then restart R: `dir.create(path.expand(Sys.getenv("R_LIBS_USER")), recursive = TRUE)` |
+| Positron started the wrong R version | Delete the console session (bin icon) and start a new one. Check `R.version.string` before installing anything |
+| Quarto said `knitr` or `rmarkdown` was missing | The folder's `.Rprofile` is missing; renv was not active |
+| Quarto could not find `scripts/00_setup.R` | The chapter lacks its `here::i_am()` line |
+| Script 08 stopped on a GHSL land tile's extent | Fixed. Land tiles are trimmed where mostly sea; the check now accepts that |
+
+After installing a package, run `renv::snapshot()`. Before committing, run
+`renv::status()`. A package used but never snapshotted works on your machine
+and fails on everyone else's.
+
+---
+
+## Licences and attribution
+
+**Code:** Apache-2.0 (see `LICENSE`). It was chosen over MIT because its §5
+licenses every contribution on the same terms by default, which suits a
+volunteer project with no contributor agreement.
+
+**Dove's Guide:** CC BY-SA 4.0. Wherever a Dove extract is redistributed,
+including the questionnaire's tower list, it must carry this attribution
+(the text is `DOVE_ATTRIBUTION` in `scripts/00_setup.R`):
+
+> Tower data from Dove's Guide for Church Bell Ringers
+> (<https://dove.cccbr.org.uk>), © the Central Council of Church Bell Ringers,
+> licensed CC BY-SA 4.0.
+
+One question is open and awaiting legal sign-off: whether published census
+results count as "adapted material" under the licence's ShareAlike terms.
+Totals estimated *using* Dove as a frame probably do not. A published
+tower-by-tower table carrying Dove fields very likely does, and would then have
+to be released under CC BY-SA 4.0 too.
+
+**GHSL** (population, land, Degree of Urbanisation): © European Union. Reuse
+is authorised provided the source is acknowledged. Cite Schiavina et al.
+(2023), GHS-POP and GHS-SMOD R2023A, and GHS-LAND R2022A.
+
+**ONS boundaries and Rural Urban Classification:** Open Government Licence
+v3.0. Contains OS data © Crown copyright and database right.
