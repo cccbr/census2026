@@ -38,6 +38,7 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-023 | Devon and Veronese membership figures not comparable as published | **Agreed** 2026-09-20 |
 | D-024 | ~~Tower list always fetched~~ — superseded by D-025 | Superseded |
 | D-025 | Tower list checked once per questionnaire (browser tab); stored copy used thereafter. Timeouts 20 s with nothing stored, 3 s with a copy | Provisional |
+| D-026 | Settlement measures: exponential kernels (half-distances 1/2/4/8 km, prior mode 2 km) and plain radii (1/2/5/10 km). Huff / competing-destinations allocation considered and deferred | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
@@ -76,6 +77,8 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-014 | ~~Hosting~~ | **Resolved by D-021.** Remaining work: make repo public, enable Pages from `/docs`, update `CFG.dataUrl`, retire the personal-account test host |
 | Q-015 | Does the network dependency need naming in the DPIA and privacy notice? | The committee has been informed (transparency). DPIA coverage still to be confirmed |
 | Q-018 | Confirm the volunteer-country list | Currently Australia and USA, marked `expected` in the reference CSV. Needs an owner who maintains it |
+| Q-022 | **Special-case towers**: who is on the list, and are they a certainty stratum or handled outside the chased sample? | Draft list (81 rows, all `proposed`) in `data/reference/special_towers_draft.csv`. Needed before the draw |
+| Q-023 | **The settlement classification used to stratify the chased sample** | Candidates are explored in `analysis/tower-context.qmd`: GHSL Degree of Urbanisation, k-means clusters, a two-scale grid. Needed before the draw. Analytical team to calibrate and name |
 
 ## Open — needed before analysis
 
@@ -87,6 +90,9 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-006 | Territorial society assignment for towers with multiple or no affiliations | 169 rings with 2+ affiliations; 1,057 with none. D-022 governs conflicts |
 | Q-007 | Minimum cell size and suppression rules | In the data layer, not the report layer |
 | Q-017 | **What happens to responses from rings outside the frame?** | A consequence of D-018. Such responses have no denominator, so cannot enter the weighted estimate. Proposal: retain and report descriptively, excluded from estimation. Needs deciding before the first one arrives |
+
+| Q-020 | Bells at a tower with two frame rings: max or sum | Affects Gresford and Rugby only, on `dove_2026-09-19`. Code uses max |
+| Q-021 | GHSL population epoch | E2020 in use. JRC describes 2025 and 2030 as "projections to 2025 and 2030 derived from CIESIN GPWv4.11" |
 
 ## Open — operations
 

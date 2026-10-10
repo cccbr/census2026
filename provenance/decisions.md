@@ -641,3 +641,86 @@ browsing; session storage has predictable, documentable semantics.
 questionnaire (one network request in total), a hanging connection with a
 stored copy (one 3-second wait, then none), and recovery for anyone holding the
 pre-v4.4 fixed-key copy.
+
+---
+
+## D-026 — Settlement measures use exponential kernels and plain radii; a Huff allocation was considered and deferred
+
+**2026-10-10 · Provisional (Mark)** · resolves the kernel question first raised
+as Q-019 (never registered)
+
+*Drafted by Claude at Mark's request. The reasoning is to be confirmed by Mark
+in his own words.*
+
+**What.** `scripts/08` measures each tower's settlement context with distances
+weighted in two ways:
+
+- **Exponential kernels.** The weight halves every 1, 2, 4 or 8 km.
+- **Plain circular counts.** Everything within 1, 2, 5 or 10 km.
+
+Each is applied to resident population (GHSL), frame towers and frame bells.
+The ratios of population per tower and population per bell are also computed.
+
+**Why kernels.** A hard radius gives full weight at 1.99 km and none at
+2.01 km. So both the radius chosen and small errors in coordinates move the
+number. A kernel has no cliff, so results change smoothly with the
+half-distance.
+
+**Why radii as well.** A radius is simpler to explain to a meeting. The
+analysis (`analysis/tower-context.qmd`) checks how closely the radii track the
+kernels.
+
+**The half-distances.** The prior mode is **2 km** for a local catchment. It
+comes from published travel data for weekly voluntary activities:
+
+- Sport England's Facilities Planning Model: "almost 90% of all visits, both
+  car borne or walking, are made within 20 minutes", and about 60% within
+  10 minutes.
+- US churchgoers: "Most churchgoers (68%) travel less than 15 minutes to
+  church" (McIntosh 2025, citing Lifeway and Baylor).
+- National Congregations Study: in the median congregation, 5% of regulars
+  live more than a 30-minute drive away.
+
+Under an exponential kernel over uniform population, these imply a
+half-distance of about 1.5–2.3 km. That conversion assumes about 35 km/h door
+to door and a road-to-straight-line ratio of about 1.3. Both are assumptions.
+
+1 and 4 km bracket the prior for sensitivity. 8 km stands for the wider
+market of ringers who travel to practices.
+
+There is no published data on how far ringers themselves travel. The ART
+lapsed-ringer survey hints at strong locality: "moving away" was the most-cited
+reason for stopping (32%).
+
+**Considered and deferred: a competing-destinations allocation.** This is a
+Huff (1963) style split of each population cell between the towers that can
+reach it. It appears as the three-step floating catchment area method (Wan,
+Zou & Sternberg 2012) and as Huff-2SFCA (Luo 2014). It evaluates competition
+at the resident, not at the tower.
+
+Fotheringham (1983) shows that gravity models without competition are
+"misspecified", with a "spatial-structure effect" in the estimated decay. This
+matches Mark's experience on the Tesco gravity model: competing destinations,
+not a steeper decay in attractiveness, are what shrink catchments in dense
+areas. The ratio of population to towers or bells in the local area is the
+proxy used here for that same interaction.
+
+Deferred because, in Mark's words, it is "overcomplicating things for now".
+Revisit if the tower-centred ratios fail to predict band size or response, or
+when building the post-fieldwork model.
+
+**Alternative to keep in view.** Ringing may be supply-led: each tower recruits
+its own band from its congregation and its sound, so total ringers per head
+would rise with tower density instead of being divided among towers. The
+census can test this directly.
+
+**Not settled by this entry:**
+- Q-020: bells at the two towers with two frame rings.
+- Q-021: which GHSL population epoch to use.
+- Q-022: how the special-case towers are handled.
+- Q-023: the stratification classification itself.
+
+**Encoded in:**
+- `R/catchment.R`
+- `scripts/08_build_tower_context.R` (`MEASURES`)
+- `scripts/07_fetch_geography.R` (`MAX_HALF_DISTANCE_M`)

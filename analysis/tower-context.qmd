@@ -1,0 +1,681 @@
+---
+title: "Tower settlement context: exploring the measures"
+---
+
+```{r}
+#| label: setup
+#| include: false
+source(here::here("scripts", "00_setup.R"))
+library(cluster)   # silhouette widths; ships with R
+
+FRAME_SNAPSHOT <- "dove_2026-09-19"   # <- named, never discovered
+
+# ---- choices this chapter makes, all provisional ---------------------------
+#
+# None of these is a decision. They are starting points for the analytical
+# team to calibrate, and they are set here so they are easy to find and vary.
+
+# Bells at the two towers with two frame rings (Gresford, Rugby): Q-020, open.
+MULTI_RING_BELLS <- "max"
+
+# Measures the clustering sees. Logged population at four kernel scales, plus
+# tower density at the local and wide scales. Bells are left out because they
+# are close to towers x average ring size, and would double-count density.
+CLUSTER_VARS <- c("pop_k1km", "pop_k2km", "pop_k4km", "pop_k8km",
+                  "towers_k2km", "towers_k8km")
+
+# Number of principal components fed to k-means, and the k shown in detail.
+N_PCS      <- 3
+K_CLUSTERS <- 6
+K_RANGE    <- 3:10
+
+# Rule-based alternative: bands of local (2 km kernel) and wider (8 km kernel)
+# population. NULL means "use tertiles". Replace with round numbers once the
+# distributions below have been looked at.
+LOCAL_BREAKS <- NULL
+WIDE_BREAKS  <- NULL
+
+# Bell classes for the stratification cross-tab.
+BELL_BREAKS <- c(4, 6, 8, 10, Inf)          # 4-5, 6-7, 8-9, 10+
+BELL_LABELS <- c("4-5", "6-7", "8-9", "10+")
+
+# Sample size for the expected-allocation table (chased towers, Lucky Dip).
+N_CHASED <- 1000
+
+set.seed(20261116)   # reference week; any fixed seed would do
+
+# ---- palette ----------------------------------------------------------------
+# Categorical: fixed slot order, never cycled (validated reference palette).
+PAL_CAT <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+             "#e87ba4", "#008300", "#6250d6", "#e34948")
+# Ordinal blue ramp for the Degree of Urbanisation, light (rural) to dark.
+# Lightest step is 250, so the most rural class still clears 2:1 on white.
+PAL_SMOD <- c("Very low density rural"   = "#86b6ef",
+              "Low density rural"        = "#5598e7",
+              "Rural cluster"            = "#2a78d6",
+              "Suburban or peri-urban"   = "#256abf",
+              "Semi-dense urban cluster" = "#1c5cab",
+              "Dense urban cluster"      = "#184f95",
+              "Urban centre"             = "#0d366b",
+              "Water"                    = "#9a9a9a")
+
+theme_set(
+  theme_minimal(base_size = 11) +
+    theme(panel.grid.minor = element_blank(),
+          panel.grid.major = element_line(linewidth = 0.25, colour = "grey88"),
+          legend.position = "bottom",
+          plot.title.position = "plot")
+)
+
+lg  <- function(x) log10(x + 1)     # zeros exist (Lundy); +1 person is harmless
+fmt <- scales::label_comma(accuracy = 1)
+```
+
+```{r}
+#| label: load
+#| include: false
+cur <- \(stem) here::here("data", "curated", paste0(stem, "_", FRAME_SNAPSHOT, ".parquet"))
+
+context   <- arrow::read_parquet(cur("tower_context"))
+frame     <- arrow::read_parquet(cur("frame"))
+locations <- arrow::read_parquet(cur("tower_locations"))
+special   <- readr::read_csv(
+  here::here("data", "reference", "special_towers_draft.csv"),
+  col_types = readr::cols(.default = "c")
+)
+
+# Every measure the context table carries, kernels first, then radii.
+measures <- grep("^pop_(k|r)\\d+km$", names(context), value = TRUE) |>
+  sub(pattern = "^pop_", replacement = "")
+measures <- measures[order(!startsWith(measures, "k"),
+                           as.numeric(gsub("\\D", "", measures)))]
+
+# One row per FRAME tower (D-017, D-019). Display and country from the first
+# frame ring; bells per MULTI_RING_BELLS.
+tw <- frame |>
+  dplyr::filter(.data$frame_full) |>
+  dplyr::summarise(
+    bells   = if (MULTI_RING_BELLS == "max") max(.data$bells) else sum(.data$bells),
+    country = dplyr::first(.data$country),
+    display = dplyr::first(.data$display),
+    .by = "tower_id"
+  ) |>
+  dplyr::inner_join(locations, by = "tower_id") |>
+  dplyr::inner_join(context, by = "tower_id") |>
+  dplyr::left_join(
+    special |> dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
+      dplyr::select("tower_id", special = "category"),
+    by = "tower_id"
+  ) |>
+  dplyr::mutate(
+    smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
+    bell_class = cut(.data$bells, BELL_BREAKS, BELL_LABELS, right = FALSE),
+    region = dplyr::case_when(
+      .data$country %in% c("England", "Wales") ~ "England & Wales",
+      .data$country %in% BRITISH_ISLES ~ "Rest of British Isles",
+      TRUE ~ .data$country
+    )
+  )
+
+n_missing_context <- sum(frame$frame_full) - sum(frame$frame_full & frame$tower_id %in% context$tower_id)
+```
+
+This chapter looks at how the settlement measures from `scripts/08` vary and
+covary across the `r fmt(nrow(tw))` frame towers on snapshot
+`r FRAME_SNAPSHOT`. The aim is to choose a small set of classes or scales to
+stratify the chased sample by, and to have something concrete for the
+analytical team to calibrate, validate and name.
+
+Nothing here is a decision. The choices at the top of the source are
+starting points.
+
+::: {.callout-note}
+**What the measures are (D-026).** For each tower:
+
+- `k<h>km` is an exponential kernel whose weight halves every *h* km. 2 km is
+  the prior mode for a local catchment.
+- `r<d>km` is a plain count within *d* km.
+- `pop_` is resident population from GHSL, `towers_` and `bells_` count
+  frame towers and bells (the tower itself included), and `pop_per_bell_`
+  is the ratio.
+- A Huff-type allocation that splits population between competing towers
+  was considered and deferred (D-026). The ratios here measure competition
+  at the tower, not at the resident.
+:::
+
+## Coverage
+
+```{r}
+#| label: coverage
+tw |>
+  dplyr::count(.data$region, name = "towers") |>
+  dplyr::mutate(share = scales::percent(.data$towers / sum(.data$towers), 0.1)) |>
+  knitr::kable()
+```
+
+`r n_missing_context` frame rings have no context row. This should be zero.
+If it is not, script 08's scope or the coordinates need checking.
+
+## How each measure is distributed
+
+Each panel is one measure on a log scale. The kernels and radii should look
+alike in shape; the question is how much they differ in spread.
+
+```{r}
+#| label: fig-dist
+#| fig-height: 9
+#| fig-cap: "Distribution of each measure across frame towers (log10 of value + 1)."
+long <- tw |>
+  dplyr::select("tower_id", dplyr::matches(paste0("^(pop|towers|pop_per_bell)_(",
+                                                 paste(measures, collapse = "|"), ")$"))) |>
+  tidyr::pivot_longer(-"tower_id", names_to = c("family", "measure"),
+                      names_pattern = "^(pop_per_bell|pop|towers)_(.*)$") |>
+  dplyr::mutate(measure = factor(.data$measure, levels = measures),
+                family  = factor(.data$family, levels = c("pop", "towers", "pop_per_bell"),
+                                 labels = c("Population", "Frame towers", "Population per bell")))
+
+ggplot(long, aes(lg(value))) +
+  geom_histogram(bins = 60, fill = PAL_CAT[1], colour = NA) +
+  facet_grid(measure ~ family, scales = "free") +
+  labs(x = "log10(value + 1)", y = "Towers") +
+  theme(strip.text.y = element_text(angle = 0))
+```
+
+```{r}
+#| label: tbl-quantiles
+long |>
+  dplyr::summarise(
+    p05 = stats::quantile(.data$value, 0.05, na.rm = TRUE),
+    p25 = stats::quantile(.data$value, 0.25, na.rm = TRUE),
+    p50 = stats::quantile(.data$value, 0.50, na.rm = TRUE),
+    p75 = stats::quantile(.data$value, 0.75, na.rm = TRUE),
+    p95 = stats::quantile(.data$value, 0.95, na.rm = TRUE),
+    .by = c("family", "measure")
+  ) |>
+  dplyr::arrange(.data$family, .data$measure) |>
+  dplyr::mutate(dplyr::across(p05:p95, \(x) signif(x, 3))) |>
+  knitr::kable(caption = "Quantiles across frame towers")
+```
+
+## Do the radii add anything to the kernels?
+
+If a radius ranks towers almost exactly as a kernel does, the radius can be
+used to explain the kernel to a meeting, and nothing is lost. The table gives,
+for each kernel, the radius with the highest rank correlation.
+
+Expect the matching radius to be much wider than the half-distance. Over
+uniform ground, half of a kernel's total weight lies within about 2.4
+half-distances, and 90% within about 5.6. So a "1 km" kernel draws most of its
+weight from within about 5 km. To a meeting, describe the 2 km kernel as
+"people within about 5 km, nearer ones counting more", not as "people within
+2 km".
+
+```{r}
+#| label: tbl-kernel-radius
+pop_mat <- tw |> dplyr::select(dplyr::all_of(paste0("pop_", measures)))
+rho <- stats::cor(pop_mat, method = "spearman")
+kern <- paste0("pop_", grep("^k", measures, value = TRUE))
+rad  <- paste0("pop_", grep("^r", measures, value = TRUE))
+
+tibble::tibble(kernel = kern) |>
+  dplyr::mutate(
+    best_radius = rad[apply(rho[kern, rad, drop = FALSE], 1, which.max)],
+    spearman    = round(apply(rho[kern, rad, drop = FALSE], 1, max), 3)
+  ) |>
+  knitr::kable()
+```
+
+```{r}
+#| label: fig-kernel-radius
+#| fig-height: 4
+#| fig-cap: "2 km kernel against the 2 km and 5 km radii. Points far off the band are towers where the radius edge cuts through a town."
+tw |>
+  dplyr::select("pop_k2km", "pop_r2km", "pop_r5km") |>
+  tidyr::pivot_longer(c("pop_r2km", "pop_r5km"), names_to = "radius") |>
+  ggplot(aes(lg(pop_k2km), lg(value))) +
+  geom_point(size = 0.6, alpha = 0.25, colour = PAL_CAT[1]) +
+  facet_wrap(~radius) +
+  coord_cartesian(xlim = c(lg(stats::quantile(tw$pop_k2km, 0.002)), NA)) +
+  labs(x = "log10 population, 2 km kernel", y = "log10 population, radius")
+```
+
+## Correlation structure
+
+Rank correlations across every measure, clustered so that measures that move
+together sit together. Large blocks of near-1 mean redundant measures; the
+interesting structure is in the off-diagonal blocks.
+
+```{r}
+#| label: fig-corr
+#| fig-height: 8
+#| fig-cap: "Spearman correlations between all measures."
+all_vars <- tw |>
+  dplyr::select(dplyr::matches(paste0("^(pop|towers|bells|pop_per_bell)_(",
+                                      paste(measures, collapse = "|"), ")$")))
+cm <- stats::cor(all_vars, method = "spearman", use = "pairwise.complete.obs")
+ord <- stats::hclust(stats::as.dist(1 - cm))$order
+cm_long <- as.data.frame(as.table(cm)) |>
+  dplyr::mutate(Var1 = factor(.data$Var1, levels = colnames(cm)[ord]),
+                Var2 = factor(.data$Var2, levels = colnames(cm)[ord]))
+
+ggplot(cm_long, aes(Var1, Var2, fill = Freq)) +
+  geom_tile(colour = "white", linewidth = 0.3) +
+  scale_fill_gradient2(low = "#eb6834", mid = "#f2f2f2", high = "#184f95",
+                       midpoint = 0, limits = c(-1, 1), name = "Spearman") +
+  coord_equal() +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        panel.grid = element_blank())
+```
+
+## Towers with almost nobody around them
+
+A handful of towers have close to zero population within the 2 km kernel.
+They are listed here, then kept out of the axis ranges below so they do not
+squash the plots. They stay in every table and in the clustering.
+
+```{r}
+#| label: tbl-empty
+tw |>
+  dplyr::filter(.data$pop_k2km < 50) |>
+  dplyr::arrange(.data$pop_k2km) |>
+  dplyr::transmute(.data$display, .data$country, pop_k2km = round(.data$pop_k2km),
+                   pop_k8km = fmt(.data$pop_k8km), .data$special) |>
+  knitr::kable(caption = "Frame towers with fewer than 50 people in the 2 km kernel")
+
+# Axis floor for the scatter plots: the 0.2nd percentile of the 2 km kernel.
+floor_2km <- lg(stats::quantile(tw$pop_k2km, 0.002))
+floor_8km <- lg(stats::quantile(tw$pop_k8km, 0.002))
+```
+
+## Local scale against wider scale
+
+This plane carries most of your three phenomena:
+
+- **Up the diagonal:** hamlet, then village, then town, then city.
+- **Above the diagonal:** low local population but high wider population. A
+  village on the edge of a conurbation, or a tower in a merged-villages
+  suburb.
+- **Below the diagonal:** a free-standing town with empty country around it.
+
+```{r}
+#| label: fig-local-wide
+#| fig-height: 6
+#| fig-cap: "Local (2 km kernel) against wider (8 km kernel) population, coloured by GHSL Degree of Urbanisation."
+ggplot(tw, aes(lg(pop_k2km), lg(pop_k8km), colour = smod_class)) +
+  geom_point(size = 0.8, alpha = 0.6) +
+  scale_colour_manual(values = PAL_SMOD, drop = TRUE, name = NULL) +
+  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 2)) +
+  coord_cartesian(xlim = c(floor_2km, NA), ylim = c(floor_8km, NA)) +
+  labs(x = "log10 population, 2 km kernel", y = "log10 population, 8 km kernel")
+```
+
+The vertical distance from the main band is a candidate single index of
+"embeddedness": how much bigger the wider area is than the place itself.
+
+```{r}
+#| label: fig-embedded
+#| fig-height: 4
+#| fig-cap: "Embeddedness, log10(8 km kernel) minus log10(2 km kernel), by Degree of Urbanisation."
+tw |>
+  dplyr::mutate(embedded = lg(.data$pop_k8km) - lg(.data$pop_k2km)) |>
+  ggplot(aes(smod_class, embedded)) +
+  geom_boxplot(outlier.size = 0.4, fill = "#cde2fb", colour = "#184f95") +
+  coord_flip() +
+  labs(x = NULL, y = "log10(8 km) - log10(2 km)")
+```
+
+## Competition: people per tower and per bell
+
+City centres should stand out as many towers and few residents. Dense
+conurbations should show more towers than their population alone predicts.
+
+```{r}
+#| label: fig-competition
+#| fig-height: 6
+#| fig-cap: "Local population against local tower density (2 km kernel). Diagonal lines are constant population per tower."
+ref <- tibble::tibble(ppt = c(100, 1000, 10000, 1e5))
+ggplot(tw, aes(lg(towers_k2km), lg(pop_k2km))) +
+  geom_abline(data = ref, aes(intercept = log10(ppt), slope = 1),
+              colour = "grey70", linewidth = 0.3, linetype = 2) +
+  geom_point(aes(colour = smod_class), size = 0.8, alpha = 0.6) +
+  geom_point(data = dplyr::filter(tw, !is.na(special)),
+             shape = 21, size = 2.2, stroke = 0.6, colour = "black", fill = NA) +
+  scale_colour_manual(values = PAL_SMOD, drop = TRUE, name = NULL) +
+  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 2)) +
+  coord_cartesian(ylim = c(floor_2km, NA)) +
+  labs(x = "log10 frame towers, 2 km kernel", y = "log10 population, 2 km kernel",
+       caption = "Black rings: towers on the draft special-case list. Dashed lines: 100, 1,000, 10,000, 100,000 people per tower.")
+```
+
+```{r}
+#| label: fig-ppb-smod
+#| fig-height: 4
+#| fig-cap: "Population per bell (2 and 8 km kernels) by Degree of Urbanisation."
+tw |>
+  dplyr::select("smod_class", "pop_per_bell_k2km", "pop_per_bell_k8km") |>
+  tidyr::pivot_longer(-"smod_class") |>
+  ggplot(aes(smod_class, lg(value))) +
+  geom_boxplot(outlier.size = 0.4, fill = "#cde2fb", colour = "#184f95") +
+  facet_wrap(~name) +
+  coord_flip() +
+  labs(x = NULL, y = "log10 population per bell")
+```
+
+## The off-the-shelf classes
+
+How the GHSL Degree of Urbanisation and the ONS 2021 Rural Urban
+Classification split the frame, and how they line up with each other.
+
+```{r}
+#| label: tbl-smod-bells
+tw |>
+  dplyr::count(.data$smod_class, .data$bell_class) |>
+  tidyr::pivot_wider(names_from = "bell_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Frame towers by Degree of Urbanisation and bells")
+```
+
+```{r}
+#| label: tbl-smod-ruc
+tw |>
+  dplyr::filter(!is.na(.data$ruc21nm)) |>
+  dplyr::count(.data$ruc21nm, .data$smod_class) |>
+  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "England & Wales: ONS RUC 2021 against Degree of Urbanisation")
+```
+
+## Principal components
+
+Principal components on the standardised logs of the clustering variables.
+If the first component is "size" and the second is "local against wider",
+the plane above already holds most of the information.
+
+```{r}
+#| label: pca
+X <- tw |>
+  dplyr::select(dplyr::all_of(CLUSTER_VARS)) |>
+  dplyr::mutate(dplyr::across(dplyr::everything(), lg)) |>
+  scale()
+pca <- stats::prcomp(X)
+
+tibble::tibble(
+  component = paste0("PC", seq_along(pca$sdev)),
+  variance  = scales::percent(pca$sdev^2 / sum(pca$sdev^2), 0.1),
+  cumulative = scales::percent(cumsum(pca$sdev^2) / sum(pca$sdev^2), 0.1)
+) |>
+  knitr::kable(caption = "Variance explained")
+
+round(pca$rotation[, 1:min(4, ncol(X))], 2) |>
+  knitr::kable(caption = "Loadings")
+```
+
+```{r}
+#| label: fig-pca
+#| fig-height: 6
+#| fig-cap: "Towers on the first two components, coloured by Degree of Urbanisation."
+scores <- as.data.frame(pca$x[, 1:N_PCS])
+ggplot(dplyr::bind_cols(tw, scores), aes(PC1, PC2, colour = smod_class)) +
+  geom_point(size = 0.8, alpha = 0.6) +
+  scale_colour_manual(values = PAL_SMOD, drop = TRUE, name = NULL) +
+  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 2))
+```
+
+## Candidate classification A: clusters
+
+k-means on the first `r N_PCS` components, for k from `r min(K_RANGE)` to
+`r max(K_RANGE)`. The elbow and the mean silhouette width are guides, not
+verdicts. What matters more is whether the clusters can be named and
+explained.
+
+```{r}
+#| label: fig-k
+#| fig-height: 3.5
+#| fig-cap: "Within-cluster sum of squares and mean silhouette width by k (silhouette on a random 2,500 towers)."
+km_fits <- purrr::map(K_RANGE, \(k) stats::kmeans(scores, centers = k, nstart = 50, iter.max = 100))
+sil_idx <- sample(nrow(scores), min(2500, nrow(scores)))
+d_sub   <- stats::dist(scores[sil_idx, ])
+
+k_diag <- tibble::tibble(
+  k = K_RANGE,
+  within_ss = purrr::map_dbl(km_fits, "tot.withinss"),
+  silhouette = purrr::map_dbl(km_fits, \(f)
+    mean(cluster::silhouette(f$cluster[sil_idx], d_sub)[, "sil_width"]))
+) |>
+  tidyr::pivot_longer(-"k") |>
+  dplyr::mutate(name = dplyr::recode(.data$name,
+    within_ss = "Total within-cluster sum of squares",
+    silhouette = "Mean silhouette width"))
+
+ggplot(k_diag, aes(k, value)) +
+  geom_line(colour = PAL_CAT[1], linewidth = 0.7) +
+  geom_point(colour = PAL_CAT[1], size = 2) +
+  facet_wrap(~name, scales = "free_y") +
+  scale_x_continuous(breaks = K_RANGE) +
+  labs(y = NULL)
+```
+
+```{r}
+#| label: clusters
+fit <- km_fits[[which(K_RANGE == K_CLUSTERS)]]
+
+# Label clusters in a stable order (by median wider population, then local),
+# so C1 is always the most rural. The labels are placeholders for the
+# analytical team to name.
+tw$cluster_raw <- fit$cluster
+cl_order <- tw |>
+  dplyr::summarise(w = stats::median(.data$pop_k8km), l = stats::median(.data$pop_k2km),
+                   .by = "cluster_raw") |>
+  dplyr::arrange(.data$w, .data$l) |>
+  dplyr::mutate(cluster = factor(paste0("C", dplyr::row_number()),
+                                 levels = paste0("C", seq_len(K_CLUSTERS))))
+tw <- tw |>
+  dplyr::left_join(cl_order |> dplyr::select("cluster_raw", "cluster"), by = "cluster_raw")
+PAL_CL <- stats::setNames(PAL_CAT[seq_len(K_CLUSTERS)], levels(tw$cluster))
+```
+
+```{r}
+#| label: tbl-cluster-profile
+modal <- \(x) names(sort(table(x), decreasing = TRUE))[1]
+tw |>
+  dplyr::summarise(
+    towers        = dplyr::n(),
+    share         = scales::percent(dplyr::n() / nrow(tw), 0.1),
+    pop_2km       = fmt(stats::median(.data$pop_k2km)),
+    pop_8km       = fmt(stats::median(.data$pop_k8km)),
+    towers_2km    = round(stats::median(.data$towers_k2km), 1),
+    pop_per_bell_2km = fmt(stats::median(.data$pop_per_bell_k2km)),
+    modal_smod    = modal(.data$smod_class),
+    median_bells  = stats::median(.data$bells),
+    .by = "cluster"
+  ) |>
+  dplyr::arrange(.data$cluster) |>
+  knitr::kable(caption = "Cluster profiles (medians)")
+```
+
+Five towers drawn at random from each cluster, as a first aid to naming:
+
+```{r}
+#| label: tbl-cluster-examples
+tw |>
+  dplyr::slice_sample(n = 5, by = "cluster") |>
+  dplyr::arrange(.data$cluster) |>
+  dplyr::summarise(examples = paste(.data$display, collapse = "; "), .by = "cluster") |>
+  knitr::kable()
+```
+
+```{r}
+#| label: fig-cluster-plane
+#| fig-height: 6
+#| fig-cap: "Clusters on the local-against-wider plane."
+ggplot(tw, aes(lg(pop_k2km), lg(pop_k8km), colour = cluster)) +
+  geom_point(size = 0.8, alpha = 0.6) +
+  scale_colour_manual(values = PAL_CL, name = NULL) +
+  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 1)) +
+  coord_cartesian(xlim = c(floor_2km, NA), ylim = c(floor_8km, NA)) +
+  labs(x = "log10 population, 2 km kernel", y = "log10 population, 8 km kernel")
+```
+
+```{r}
+#| label: fig-cluster-map
+#| fig-height: 9
+#| fig-cap: "Clusters mapped: Great Britain, with London, the West Midlands and Norfolk enlarged."
+gb <- dplyr::filter(tw, .data$country %in% c("England", "Wales", "Scotland"))
+ggplot(gb, aes(lon, lat, colour = cluster)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_colour_manual(values = PAL_CL, name = NULL) +
+  coord_quickmap() +
+  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 1)) +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), panel.grid = element_blank())
+```
+
+```{r}
+#| label: fig-cluster-zoom
+#| fig-height: 5
+zooms <- tibble::tribble(
+  ~area,            ~lon_min, ~lon_max, ~lat_min, ~lat_max,
+  "London",           -0.55,     0.35,    51.25,    51.75,
+  "West Midlands",    -2.35,    -1.55,    52.30,    52.70,
+  "Norfolk",           0.40,     1.80,    52.35,    53.00
+)
+zoomed <- purrr::pmap(zooms, \(area, lon_min, lon_max, lat_min, lat_max)
+  tw |>
+    dplyr::filter(dplyr::between(.data$lon, lon_min, lon_max),
+                  dplyr::between(.data$lat, lat_min, lat_max)) |>
+    dplyr::mutate(area = area)) |>
+  purrr::list_rbind()
+
+ggplot(zoomed, aes(lon, lat, colour = cluster)) +
+  geom_point(size = 1.4, alpha = 0.9) +
+  scale_colour_manual(values = PAL_CL, name = NULL) +
+  facet_wrap(~area, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 1)) +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), panel.grid = element_blank())
+```
+
+## Candidate classification B: a simple two-scale grid
+
+Easier to explain than clusters. Bands of local population crossed with bands
+of wider population, giving at most nine cells. With no breaks set, these are
+tertiles.
+
+```{r}
+#| label: grid
+band <- function(x, breaks, labels) {
+  if (is.null(breaks)) breaks <- stats::quantile(x, c(1/3, 2/3))
+  cut(x, c(-Inf, breaks, Inf), labels = labels, right = FALSE)
+}
+tw <- tw |>
+  dplyr::mutate(
+    local = band(.data$pop_k2km, LOCAL_BREAKS, c("small place", "mid", "large place")),
+    wide  = band(.data$pop_k8km, WIDE_BREAKS,  c("sparse area", "mid", "dense area")),
+    grid  = interaction(.data$local, .data$wide, sep = " / ", lex.order = TRUE)
+  )
+
+used_local <- if (is.null(LOCAL_BREAKS)) stats::quantile(tw$pop_k2km, c(1/3, 2/3)) else LOCAL_BREAKS
+used_wide  <- if (is.null(WIDE_BREAKS))  stats::quantile(tw$pop_k8km, c(1/3, 2/3)) else WIDE_BREAKS
+
+tw |>
+  dplyr::count(.data$local, .data$wide) |>
+  tidyr::pivot_wider(names_from = "wide", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Frame towers in each grid cell (rows: local; columns: wider)")
+```
+
+Breaks used: local `r paste(fmt(used_local), collapse = " and ")` people
+(2 km kernel); wider `r paste(fmt(used_wide), collapse = " and ")` people
+(8 km kernel).
+
+How the grid lines up with the clusters and with the Degree of Urbanisation:
+
+```{r}
+#| label: tbl-grid-compare
+tw |>
+  dplyr::count(.data$grid, .data$cluster) |>
+  tidyr::pivot_wider(names_from = "cluster", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Grid cells against clusters")
+
+tw |>
+  dplyr::count(.data$grid, .data$smod_class) |>
+  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Grid cells against Degree of Urbanisation")
+```
+
+## What each candidate means for stratification
+
+Strata are candidate class x bell class. The table shows the frame count in
+each cell and the expected number of chased towers under proportional
+allocation at n = `r fmt(N_CHASED)`. Cells expecting fewer than about 10 give
+unstable stratum estimates and would need collapsing.
+
+```{r}
+#| label: tbl-strata
+strata_table <- function(class_col, label) {
+  tw |>
+    dplyr::count(class = .data[[class_col]], .data$bell_class) |>
+    dplyr::mutate(expected = round(.data$n / nrow(tw) * N_CHASED, 1)) |>
+    dplyr::summarise(
+      candidate = label,
+      cells = dplyr::n(),
+      cells_under_10 = sum(.data$expected < 10),
+      smallest_expected = min(.data$expected)
+    )
+}
+dplyr::bind_rows(
+  strata_table("smod_class", "Degree of Urbanisation (GHSL)"),
+  strata_table("cluster",    paste0("Clusters, k = ", K_CLUSTERS)),
+  strata_table("grid",       "Two-scale grid")
+) |>
+  knitr::kable(caption = "Stratum cell sizes, candidate x bell class")
+```
+
+```{r}
+#| label: tbl-strata-detail
+tw |>
+  dplyr::count(.data$cluster, .data$bell_class) |>
+  dplyr::mutate(cell = paste0(.data$n, " (", round(.data$n / nrow(tw) * N_CHASED), ")")) |>
+  dplyr::select(-"n") |>
+  tidyr::pivot_wider(names_from = "bell_class", values_from = "cell", values_fill = "0", names_sort = TRUE) |>
+  knitr::kable(caption = "Clusters x bells: frame towers (expected chased towers)")
+```
+
+## Where the special-case towers fall
+
+```{r}
+#| label: tbl-special
+tw |>
+  dplyr::filter(!is.na(.data$special)) |>
+  dplyr::count(.data$special, .data$cluster) |>
+  tidyr::pivot_wider(names_from = "cluster", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Draft special-case list against clusters")
+```
+
+If the City of London towers do not form, or sit inside, a distinct cluster,
+that supports handling them by list rather than by measure.
+
+## Outside the British Isles
+
+The measures use the same definitions everywhere. Whether the clusters still
+mean the same thing abroad is a separate question.
+
+```{r}
+#| label: tbl-abroad
+tw |>
+  dplyr::count(.data$region, .data$cluster) |>
+  tidyr::pivot_wider(names_from = "cluster", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Clusters by region")
+```
+
+## For the analytical team
+
+Questions this chapter is meant to help answer:
+
+1. **Kernels or radii?** If the radii track the kernels closely, use radii
+   in anything said to a meeting.
+2. **How many dimensions?** If two components carry most of the variance, a
+   two-scale grid may communicate as well as clusters do.
+3. **Which k, and what are the clusters called?** Use the example towers and
+   the maps. Names should be things a ringer would recognise.
+4. **Do the special-case towers need a list?** Or do the measures find them?
+5. **Which candidate gives workable strata** once crossed with bells, at
+   about 1,000 chased towers?
