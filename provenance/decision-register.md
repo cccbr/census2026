@@ -101,6 +101,7 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-017 | **What happens to responses from rings outside the frame?** | A consequence of D-018. Such responses have no denominator, so cannot enter the weighted estimate. Proposal: retain and report descriptively, excluded from estimation. Needs deciding before the first one arrives |
 
 | Q-024 | **Shared bands: how rosters are de-duplicated, and how Golden Ticket weights treat them** | Arises from D-030. Towers linked by any tower rep's or ringer's list form clusters (connected components). Candidate rules for a cluster's roster: the largest return in it, or a union built from ringers' own tower lists. A ringer in a shared band can be reached through any of its towers, which changes their selection probability. Not decided |
+| Q-025 | **May any Gloucester & Bristol register counts be published?** | The Association's 2025 tower register (ringers per tower) was shared by its treasurer. Held outside the public repo (`data/raw`, `data/curated`); only the name-to-Dove crosswalk is committed. Ask the Association before publishing counts, even in aggregate |
 | Q-020 | Bells at a tower with two frame rings: max or sum | Affects Gresford and Rugby only, on `dove_2026-09-19`. Code uses max |
 | Q-021 | GHSL population epoch | E2020 in use. JRC describes 2025 and 2030 as "projections to 2025 and 2030 derived from CIESIN GPWv4.11" |
 

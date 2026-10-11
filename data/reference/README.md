@@ -63,3 +63,12 @@ match the rules: a disagreement is the useful part.
 To add your own: append rows, one per tower, keeping the relationship short
 and impersonal. **This repository is public.** Do not add anything about
 other people, or anything you would not want published.
+
+## gb_register_crosswalk.csv — the Gloucester & Bristol register matched to Dove
+
+The Association's 2025 tower register (towers, branches, bells, ringers on
+the register) matched to Dove's `tower_id` and `ring_id`. Only tower names
+and Dove keys are here; the ringer counts stay out of this public
+repository. Built and explained by `scripts/11_import_gb_register.R` and
+`gb_register.md`. Proposed matches have `reviewed` blank until a person has
+checked them.

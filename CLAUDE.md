@@ -452,6 +452,11 @@ sample (Q-023, needed before the draw):
   describe places today, never because they fit ring size (D-035): the
   500 m kernel for town, village and small-city suburb lines, the 1 km
   kernel for the inner-city line. Draft B is the working classification.
+- The Gloucester & Bristol Association's 2025 tower register (ringers per
+  tower, from its treasurer) is imported by `scripts/11_import_gb_register.R`.
+  Its counts are third-party data and stay in `data/raw` and `data/curated`,
+  never in the public repo (Q-025); only the name-to-Dove crosswalk is
+  committed. See `data/reference/gb_register.md`.
 - `data/reference/known_towers.csv` holds towers people know, with what each
   feels like. A draft special-case tower list (81 rows, all `proposed`) is in
   `data/reference/special_towers_draft.csv` (Q-022).
