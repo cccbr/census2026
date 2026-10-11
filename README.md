@@ -142,9 +142,10 @@ Both are Quarto projects, each in its own folder with its own `_quarto.yml`.
 
 - **`analysis/`** is the analytical narrative, rendered as a book. Render it
   with `quarto render analysis/`. It caches results in `analysis/_freeze/`, so
-  only changed chapters re-run. Three chapters prepare the chased sample:
-  *Towers and the places they stand in*, *Choosing a classification* and
-  *Choosing a sampling method*. They share data, provisional choices and the
+  only changed chapters re-run. Four chapters prepare the chased sample:
+  *Towers and the places they stand in*, *What the bells remember* (a side
+  quest on ring size, which does not set the classification), *Choosing a
+  classification* and *Choosing a sampling method*. They share data, provisional choices and the
   working classification through `analysis/_common.R`.
 - **`reports/`** will produce one report per ringing association, from one
   template. It never caches, because a cached run would show one

@@ -30,7 +30,7 @@ type_colours <- unname(PAL_TYPE[TYPE_LEVELS])
 # rather than repeating its centre's figures (the page must stay under 1 MiB).
 centres <- frame_towers |>
   dplyr::filter(!is.na(.data$centre_key)) |>
-  dplyr::distinct(.data$centre_key, .data$centre_pop, .data$centre_density) |>
+  dplyr::distinct(.data$centre_key, .data$centre_pop) |>
   dplyr::mutate(centre = dplyr::row_number() - 1L)
 
 rows <- frame_towers |>
@@ -42,7 +42,8 @@ rows <- frame_towers |>
     label = .data$display,
     bells = .data$bells,
     type  = as.integer(.data$type) - 1L,            # 0-based for JavaScript
-    density = signif(.data[[LOCAL_VAR]], 3),
+    density = signif(.data[[LOCAL_VAR]], 3),         # 500 m kernel
+    district = signif(.data[[INNER_VAR]], 3),        # 1 km kernel
     centre = .data$centre,
     other_bells = .data$other_bells_1km,
     region = signif(.data[[REGION_VAR]], 3),
@@ -57,8 +58,7 @@ payload <- list(
   types     = TYPE_LEVELS,
   types1988 = unname(crosswalk_1988[TYPE_LEVELS]),
   colours   = type_colours,
-  centres   = unname(purrr::map2(signif(centres$centre_pop, 3),
-                                 signif(centres$centre_density, 3), c)),
+  centres   = unname(purrr::map(signif(centres$centre_pop, 3), \(p) list(p))),
   fields    = names(rows),
   rows      = purrr::pmap(rows, \(...) unname(list(...)))   # arrays, not objects
 )

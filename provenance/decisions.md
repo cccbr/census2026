@@ -989,3 +989,62 @@ default (`DRAFT_B$small_city_suburbs`), with test cases in the chapter.
 **Also.** An interactive map of the types (`scripts/10_export_settlement_map.R`,
 `docs/settlement-map/`) for the volunteers to check, served by GitHub Pages.
 
+
+## D-035 — Classification scales chosen for today's places: 500 m and 1 km kernels; suburbs by one density line; ring-size analysis a side quest
+
+**2026-10-11 · Provisional (Mark)** · amends D-032, D-033, D-034
+
+**Context.** The 250 m kernel was adopted partly because it tracks ring size
+best. Mark: that tight fit is of historical interest (it may reflect the
+walking world the bells were hung in), but the classification should
+describe places as they are today, and the map showed the inner city too
+scattered within big cities. Choosing a scale because it fits ring size
+would also bring ring size into the place types by the back door (D-028).
+
+**Decision.**
+- Two kernels, for two questions. The 500 m kernel describes the tower's own
+  neighbourhood: town 420, village 200 and small-city suburb 3,000 people
+  per km² of land. The 1 km kernel describes its district within a
+  conurbation: inner city 4,000 people per km² of land. The historic-core
+  test keeps its 1 km circle (D-031).
+- Suburbs of smaller cities by one density line, the same for every city,
+  not by comparison with the city's average. A city that sprawls throughout
+  can be wholly suburban (Mark). The test "fewer than 12 bells at other
+  towers within 1 km" stays, so old centres with few residents (Gloucester)
+  remain in the city.
+- The ring-size analysis (scale curve, decision trees, frontier model,
+  earshot, the walking-world idea) moves to its own chapter,
+  `analysis/bells-remember.qmd`, "What the bells remember". It does not set
+  the classification.
+
+**Evidence** (calibrated on the real tower context table of 2026-10-11, in
+a replica of Draft B that reproduced the previous shares exactly; the
+chapter recomputes all of it):
+- Inner city: share of inner-city towers whose four nearest conurbation
+  neighbours get the same call, 70% on the 250 m kernel, 76% on 500 m, 85%
+  on 1 km (line 4,000), 87% on 2 km. All ten UK conurbations keep an inner
+  city on 1 km; only six do on 2 km.
+- Towns: agreement between "Town" and being in a contiguous urban cluster
+  (5,000+), each kernel's line set to match 1988's share of towns: 87% on
+  250 m, 89% on 500 m, 88% on 1 km, 79% on 2 km. The 2 km kernel demoted
+  market towns (Cirencester to Village; Moreton-in-Marsh, Petworth, Brecon
+  to hamlet) while matching 1988's total share, so it was rejected.
+- The 1 km kernel broke the old "below the city's average" suburb rule
+  (Cheltenham Minster, Luton S Mary, Wakefield Cathedral became suburban),
+  because a smoothed density was compared with an unsmoothed average.
+- Shares of comparable towers: village 56% (1988: 53%), town 27% (28%),
+  large city 6% (6%), suburban 8% (11%), inner city 3% (2%). All 12 known
+  towers unchanged. About 1,100 frame towers change type, mostly between
+  the rural types.
+
+**Alternatives considered.** One 500 m kernel for every line (inner city
+still patchy); 1 km for cities and 2 km elsewhere (Mark's first hunch;
+fails for towns); 1 km everywhere (demotes small market towns).
+
+**Known weak points.** Some old towns with few central residents come out
+wholly suburban (Carlisle, Stafford). Towers near a line (Barnwood,
+Petworth) could go either way.
+
+**Follow-up.** Use a wide density (2 km or 4 km kernel) to sort the draw
+within strata, so the sample spreads across today's catchments without
+bending the type labels: proposed, not decided.

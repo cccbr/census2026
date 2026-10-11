@@ -109,7 +109,7 @@ st_albans <- known_row("15782")
 # ---- reclassify with one threshold changed (for sensitivity tables) ---------
 reclass <- function(d, ...) {
   th <- utils::modifyList(DRAFT_B, list(...))
-  classify_settlement_b(d$centre_pop, d$centre_density, d[[LOCAL_VAR]], d$other_bells_1km,
+  classify_settlement_b(d$centre_pop, d[[LOCAL_VAR]], d[[INNER_VAR]], d$other_bells_1km,
                         d$society, th, TYPE_LEVELS)
 }
 # The town line at which Draft B's town share comes closest to 1988's.
@@ -121,6 +121,52 @@ town_share_at <- purrr::map_dbl(line_grid, \(t)
 line_88 <- line_grid[which.min(abs(town_share_at - town_88))]
 village_b_at_88 <- mean(reclass(comparable_1988, town_density = line_88) %in%
                           c("Village", "Small village or hamlet"))
+
+# ---- the two kernels: evidence for each (D-035) ------------------------------
+# Inner city: how patchy is it at each scale? For each conurbation tower that
+# is not a historic core, compare its inner-or-suburban call with those of
+# its four nearest such neighbours.
+conurb_towers <- frame_towers |>
+  dplyr::filter(!is.na(.data$centre_pop), .data$centre_pop >= DRAFT_B$conurbation_pop,
+                .data$type != "Historic city core")
+n_ct <- nrow(conurb_towers)
+d_m <- outer(seq_len(n_ct), seq_len(n_ct), \(i, j)
+  haversine_m(conurb_towers$lon[i], conurb_towers$lat[i],
+              conurb_towers$lon[j], conurb_towers$lat[j]))
+diag(d_m) <- Inf
+nearest4 <- apply(d_m, 1, \(r) order(r)[1:4])          # 4 x towers
+uk_conurbs <- unique(conurb_towers$centre_key[conurb_towers$uk])
+inner_scale <- tibble::tribble(
+  ~kernel,  ~var,                 ~line,
+  "250 m",  "density_land_k250m", 5000,
+  "500 m",  "density_land_k500m", 4500,
+  "1 km",   "density_land_k1km",  DRAFT_B$inner_density,
+  "2 km",   "density_land_k2km",  3500
+) |>
+  dplyr::mutate(res = purrr::map2(.data$var, .data$line, \(v, l) {
+    inner <- conurb_towers[[v]] >= l
+    same  <- colMeans(matrix(inner[nearest4], nrow = 4) == rep(inner, each = 4))
+    tibble::tibble(
+      inner_towers = sum(inner),
+      same_inner   = mean(same[inner]),
+      uk_covered   = sum(uk_conurbs %in% conurb_towers$centre_key[inner & conurb_towers$uk])
+    )
+  })) |>
+  tidyr::unnest("res")
+
+# Towns: how often does "Town" coincide with being in an urban cluster
+# (a contiguous built-up area of 5,000+), traced independently of the
+# kernels? Each kernel's line is set to match 1988's share of towns.
+rural_bi <- dplyr::filter(frame_towers, .data$british_isles, is.na(.data$centre_pop))
+town_scale <- tibble::tribble(
+  ~kernel,  ~var,                 ~line,
+  "250 m",  "density_land_k250m", 600,
+  "500 m",  "density_land_k500m", DRAFT_B$town_density,
+  "1 km",   "density_land_k1km",  350,
+  "2 km",   "density_land_k2km",  350
+) |>
+  dplyr::mutate(agree = purrr::map2_dbl(.data$var, .data$line, \(v, l)
+    mean((rural_bi[[v]] >= l) == !is.na(rural_bi$urban_pop))))
 
 ```
 
@@ -148,31 +194,36 @@ frame_towers |>
       paste0("Under ", fmt(DRAFT_B$village_density), " people per km² of land around the church"),
       paste0(fmt(DRAFT_B$village_density), " to ", fmt(DRAFT_B$town_density), " people per km² of land around the church"),
       paste0(fmt(DRAFT_B$town_density), "+ people per km² of land around the church, outside any city"),
-      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people, at or above its average density or among old churches"),
-      paste0("In a conurbation, away from its densest parts; or in a smaller city, below its average density"),
-      paste0("In a conurbation's densest parts (", fmt(DRAFT_B$inner_density), "+ people per km² of land)"),
+      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people, with ", fmt(DRAFT_B$suburb_density), "+ people per km² of land around the church, or among old churches"),
+      paste0("In a conurbation, away from its densest districts; or in a smaller city, under ", fmt(DRAFT_B$suburb_density), " people per km² of land around the church"),
+      paste0("In a conurbation's densest districts (", fmt(DRAFT_B$inner_density), "+ people per km² of land, 1 km kernel)"),
       paste0("In a city centre with ", fmt(DRAFT_B$core_other_bells), "+ bells at other towers within 1 km")
     )), by = "type") |>
   dplyr::select("type", "in plain words", "frame towers", "share") |>
   knitr::kable()
 ```
 
-**Settled so far** (decision log D-028, D-029, D-031):
+**Settled so far** (decision log D-028, D-029, D-031, D-034, D-035):
 
 - Place measures only. Ring size checks the types but never defines them.
 - Cities, suburbs and conurbations come from the continuous built-up area,
   so St Albans (its own city) and Staines (part of London) fall apart.
-- Town, village and inner-city lines are densities (people per km² of land,
-  measured with a 250 m kernel), so they compare directly with the
-  international lines of 300 and 1,500 per km², and no place flips at an
-  arbitrary circle edge. The town line matches 1988's share of towns.
+- Every line is a density (people per km² of land), so the lines compare
+  directly with the international 300 and 1,500 per km², and no place flips
+  at an arbitrary circle edge. The town line matches 1988's share of towns.
+- Two kernels, for two questions (D-035): a 500 m kernel for the tower's own
+  neighbourhood (town, village, suburbs of smaller cities), and a 1 km
+  kernel for its district within a conurbation (inner city). Both were
+  chosen to describe places as they are today, not because they fit the
+  bells.
 - The conurbation line sits in a gap between city sizes, with Bristol inside.
 - Historic city cores are found by a measure, with the special list as a
   backstop.
-- Suburbs of smaller cities count as suburban: less dense than their city's
-  average, and away from its old churches.
-- The inner-city line is `r fmt(DRAFT_B$inner_density)` people per km² of
-  land, so every major conurbation has an inner city, as in 1988.
+- Suburbs of smaller cities count as suburban: under one density line, the
+  same for every city, and away from old churches. A city that sprawls
+  throughout can be wholly suburban.
+- The inner-city line keeps an inner city in every major conurbation, as
+  in 1988.
 - Aligning with 1988's five types is a high priority, given the standing of
   their author.
 
@@ -194,7 +245,8 @@ frame_towers |>
 **Where this fits.** The census will chase about 1,000 randomly drawn towers
 until each replies. The draw, and every later analysis, needs a way of saying
 what sort of place each tower is in. The chapter *Towers and the places they
-stand in* built and explored the measures. This chapter turns them into
+stand in* built and explored the measures, and *What the bells remember*
+looked at how ring size relates to them. This chapter turns them into
 named place types. *Choosing a sampling method* then uses the types.
 
 **What Mark asked for.**
@@ -469,16 +521,17 @@ knows and by comparison with 1988:
 | Type | Rule |
 | --- | --- |
 | Historic city core | In an urban centre, with at least `r fmt(DRAFT_B$core_other_bells)` bells at *other* towers within 1 km; or on the special list as a society, City of London or central London tower |
-| Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land around the church |
-| Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density; or in a smaller urban centre, less dense than its average and with fewer than `r fmt(DRAFT_B$suburb_core_bells)` bells at other towers within 1 km |
+| Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land in the district (1 km kernel) |
+| Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density; or in a smaller urban centre, with under `r fmt(DRAFT_B$suburb_density)` people per km² of land around the church and fewer than `r fmt(DRAFT_B$suburb_core_bells)` bells at other towers within 1 km |
 | City or large town | Any other tower in an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
 | Town | Not in an urban centre, with at least `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
 | Village | `r fmt(DRAFT_B$village_density)` to `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
 | Small village or hamlet | Under `r fmt(DRAFT_B$village_density)` people per km² of land around the church |
 
-"Around the church" means the `r measure_label(LOCAL_VAR)`: people nearby,
-nearer ones counting more, divided by the land the kernel covers, so the sea
-does not count as empty country. The international Degree of Urbanisation's
+"Around the church" means the `r measure_label(LOCAL_VAR)`, and "the
+district" the `r measure_label(INNER_VAR)`: people nearby, nearer ones
+counting more, divided by the land the kernel covers, so the sea does not
+count as empty country. The international Degree of Urbanisation's
 lines are 300 people per km² (a cluster, rural or urban) and 1,500 (an urban
 centre), in the same units of people per km².^[Whether the Degree of
 Urbanisation divides by land or by the whole 1 km cell has not been checked
@@ -508,27 +561,81 @@ tables below show what moving them does.
   a city across it (the table below lists the centres either side). It takes
   in London and the large metropolitan areas, which 1988 called the "major
   conurbations", and Bristol, as Mark wanted.
-- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km² of land*
-  (Mark, 11 October): at higher lines almost only London qualified, while
-  1988's inner city was in every major conurbation. It gives
+- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km² of land in the
+  district:* the line that keeps an inner city in every major conurbation,
+  as 1988 had. It gives
   `r scales::label_percent(accuracy = 0.1)(mean(frame_towers$type == "Inner city"))`
   of frame towers. Density is a rough stand-in for what 1988 meant by inner
   city, which was as much about deprivation as density.
+- *Suburbs of smaller cities, under `r fmt(DRAFT_B$suburb_density)` people
+  per km² of land around the church* (Mark, 11 October): one line for every
+  city, so a city that sprawls throughout, such as a new town, can be wholly
+  suburban. It brings Large City close to 1988's share.
 - *Town, `r fmt(DRAFT_B$town_density)` people per km² of land:* the line
-  that best matches 1988's share of towns (Mark, 11 October). It sits between
-  the international cluster line (300) and urban-centre line (1,500).
-- *Village, `r fmt(DRAFT_B$village_density)` people per km² of land:* the
-  international density for a cluster, rural or urban. Below it are hamlets,
-  and villages small enough to struggle for a band.
+  that best matches 1988's share of towns. It sits between the international
+  cluster line (300) and urban-centre line (1,500).
+- *Village, `r fmt(DRAFT_B$village_density)` people per km² of land:* below
+  it are hamlets, and villages small enough to struggle for a band. The
+  international cluster density of 300 is measured cell by cell; a 500 m
+  kernel spreads a compact village over its fields, so the equivalent line
+  is lower. 200 keeps about the same number of small villages and hamlets
+  as the international 300 did on the tighter 250 m kernel.
 
-**Why a 250 m kernel, and why density** (Mark, 11 October). Ring size tracks
-density best at the scale of a settlement's core, about 600–700 m out (the
-previous chapter), and the 250 m kernel looks that far. Unlike a 1 km
-circle, it has no hard edge, so a village whose neighbour starts 1.1 km away
-does not flip class because of where the edge falls. Expressing the lines as
-density keeps them in the same units as the international scheme. The
-historic-city-core test keeps a crisp 1 km circle, because there a compact
-cluster of towers is the point.
+### Why two kernels
+
+**The principle** (Mark, 11 October). The types describe places as they are
+today, for today's bands. The scale that best fits ring size (a 250 m
+kernel, in the chapter *What the bells remember*) reflects the places the
+bells were cast for, and choosing a scale because it fits ring size would
+bring ring size into the classification by the back door (D-028). So each
+scale is chosen for the question it answers, and checked against the map,
+the known towers and 1988.
+
+**Two questions, two scales.**
+
+- *What is the tower's own neighbourhood like?* (town, village, small
+  village or hamlet, suburbs of smaller cities): the 500 m kernel.
+- *What is its district like, within a conurbation?* (inner city or
+  suburban): the 1 km kernel.
+
+Widening a kernel costs most where places are small and separate, and helps
+most where the built-up fabric is continuous. In the countryside, a town of
+4,000 people covers about a square kilometre, so a wide kernel mostly
+measures fields and the next villages, and the town disappears. In a
+conurbation, widening loses little about the place and smooths out the
+street-by-street patchiness that made the inner city scattered on the map.
+The historic-city-core test keeps a crisp 1 km circle, because there a
+compact cluster of towers is the point.
+
+```{r}
+#| label: tbl-inner-scale
+inner_scale |>
+  dplyr::transmute(kernel = .data$kernel,
+                   `inner-city line (people per km² of land)` = fmt(.data$line),
+                   `inner-city towers` = .data$inner_towers,
+                   `same call as its 4 nearest neighbours` = pct(.data$same_inner),
+                   `UK conurbations with an inner city` = paste(.data$uk_covered, "of", length(uk_conurbs))) |>
+  knitr::kable(caption = "Inner city at four scales: how patchy it is, and whether every conurbation keeps one (frame towers in conurbations, historic cores left out)")
+```
+
+```{r}
+#| label: tbl-town-scale
+town_scale |>
+  dplyr::transmute(kernel = .data$kernel,
+                   `town line (people per km² of land)` = fmt(.data$line),
+                   `"Town" agrees with being in an urban cluster` = pct(.data$agree)) |>
+  knitr::kable(caption = "Towns at four scales, each line set to match 1988's share of towns: agreement with the contiguous urban clusters (5,000+ people), British Isles frame towers outside urban centres")
+```
+
+**What the tables show.** For the inner city, the 1 km kernel is the least
+patchy scale that still leaves an inner city in every major conurbation;
+the 2 km kernel is smoother still but loses the inner cities of the smaller
+conurbations. For towns, the 500 m kernel agrees best with the contiguous
+urban clusters, which are traced without any kernel. The 2 km kernel agrees
+worst: it demotes free-standing market towns such as Cirencester and
+promotes villages on the edge of larger towns, while still matching 1988's
+total share of towns. A matching total says little about whether the right
+towers are in each type.
 
 ### How the shares compare with 1988
 
@@ -611,6 +718,7 @@ known_b |>
     `Draft A` = as.character(.data$type_a),
     `people within 500 m` = fmt(.data$pop_r500m),
     `people per km² of land around the church` = fmt(.data[[LOCAL_VAR]]),
+    `people per km² of land in the district` = fmt(.data[[INNER_VAR]]),
     `urban centre (people)` = ifelse(is.na(.data$centre_pop), "none", fmt(.data$centre_pop)),
     `nearest urban centre (km)` = round(.data$centre_dist_km, 1),
     `international class` = as.character(.data$smod_class)
@@ -733,25 +841,24 @@ between city and suburb bands, while less experienced members keep to their
 suburb. The census's own question on where people rang in census week
 (D-030) could test that.
 
-**The rule** (adopted, Mark, 11 October). In a smaller city, a tower is
-suburban if both hold:
+**The rule** (Mark, 11 October). In a smaller city, a tower is suburban if
+both hold:
 
-- it is less dense than its city's average (people per km² of land around
-  the church, against the urban centre's population divided by its area);
-  and
+- it has fewer than `r fmt(DRAFT_B$suburb_density)` people per km² of land
+  around the church: one line, the same for every city; and
 - it has fewer than `r fmt(DRAFT_B$suburb_core_bells)` bells at other towers
   within 1 km, so it is not in an old centre with churches close together.
 
-It uses density and bell density only. It needs no centre point, so it
-treats a city with no single heart, or one that grew lopsidedly (such as
-Luton), the same way as an old cathedral city. An earlier attempt measured
-distance from a "core" tower and was dropped (Mark, 11 October): it mangled
-centres made of several old towns, making Wakefield Cathedral a suburb of
-Batley.
+Because the line is the same everywhere, a city that sprawls at low density
+throughout, as many new towns do, can be wholly suburban. That is intended.
+The rule needs no centre point, so it treats a city with no single heart,
+or one that grew lopsidedly (such as Luton), the same way as an old
+cathedral city.
 
-Why both tests: in Gloucester the cathedral quarter has few residents and is
-less dense than suburban Barnwood, so density alone would make the cathedral
-suburban. Its neighbouring towers keep it in the city.
+Why the second test: in Gloucester the old centre has few residents, so
+density alone would make the cathedral and its neighbours suburban. Their
+neighbouring towers keep them in the city. The test uses other towers'
+bells, the same measure as the historic-core test, never the tower's own.
 
 ```{r}
 #| label: tbl-suburb-tests
@@ -769,7 +876,6 @@ suburb_test |>
   dplyr::arrange(.data$centre_pop, dplyr::desc(.data[[LOCAL_VAR]])) |>
   dplyr::transmute(`urban centre (people)` = fmt(.data$centre_pop), tower = .data$display,
                    `density around the church` = fmt(.data[[LOCAL_VAR]]),
-                   `city average density` = fmt(.data$centre_density),
                    `bells at other towers within 1 km` = .data$other_bells_1km,
                    `without the suburb rule` = .data$without,
                    `Draft B` = as.character(.data$type)) |>
@@ -800,16 +906,34 @@ in the city proper and
 `r pct(mean(frame_towers$bells[in_small_city & with_sub == "Suburban"] >= 8))`
 in the suburbs.
 
-**Its weak points.** A tower just below its city's average density flips to
-suburban, so the line is soft in a city whose density is even. And a
-free-standing large town of 50,000 gets suburbs too, which may not match how
-ringers see it. The test cases are the place to judge both.
+**Its weak points.** Some old towns whose centres have few residents come
+out wholly suburban along with the new towns; Carlisle and Stafford are
+examples. A free-standing large town of 50,000 gets suburbs too, which may
+not match how ringers see it. And a tower just either side of the line, such
+as Barnwood, could reasonably go either way. The test cases and the map are
+the place to judge all three.
+
+```{r}
+#| label: tbl-all-suburban
+frame_towers |>
+  dplyr::filter(!is.na(.data$centre_pop), .data$centre_pop < DRAFT_B$conurbation_pop,
+                .data$british_isles) |>
+  dplyr::summarise(place = sub(",.*$", "", dplyr::first(.data$display)),
+                   people = dplyr::first(.data$centre_pop),
+                   towers = dplyr::n(),
+                   all_suburban = all(.data$type == "Suburban"), .by = "centre_key") |>
+  dplyr::filter(.data$all_suburban) |>
+  dplyr::arrange(dplyr::desc(.data$people)) |>
+  dplyr::transmute(`a tower in it` = .data$place, `urban centre (people)` = fmt(.data$people),
+                   `frame towers` = .data$towers) |>
+  knitr::kable(caption = "Smaller urban centres in the British Isles whose frame towers are all suburban")
+```
 
 ### How sensitive the types are to each line
 
 ```{r}
 #| label: tbl-sens-town
-purrr::map(sort(unique(c(400, 500, DRAFT_B$town_density, 800, 1000))), \(t)
+purrr::map(sort(unique(c(300, 350, DRAFT_B$town_density, 500, 600))), \(t)
   frame_towers |> dplyr::mutate(type = reclass(frame_towers, town_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
@@ -819,7 +943,7 @@ purrr::map(sort(unique(c(400, 500, DRAFT_B$town_density, 800, 1000))), \(t)
 
 ```{r}
 #| label: tbl-sens-village
-purrr::map(sort(unique(c(150, 200, DRAFT_B$village_density, 400))), \(t)
+purrr::map(sort(unique(c(100, 150, DRAFT_B$village_density, 300))), \(t)
   frame_towers |> dplyr::mutate(type = reclass(frame_towers, village_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
@@ -834,19 +958,29 @@ dplyr::bind_rows(
     frame_towers |> dplyr::mutate(type = reclass(frame_towers, conurbation_pop = t)) |>
       dplyr::count(.data$type) |> dplyr::mutate(line = paste("conurbation", fmt(t)))) |>
     purrr::list_rbind(),
-  purrr::map(c(5000, 7000, 10000), \(t)
+  purrr::map(sort(unique(c(3000, DRAFT_B$inner_density, 5000, 6000))), \(t)
     frame_towers |> dplyr::mutate(type = reclass(frame_towers, inner_density = t)) |>
       dplyr::count(.data$type) |> dplyr::mutate(line = paste("inner", fmt(t)))) |>
     purrr::list_rbind()
 ) |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different conurbation sizes (people) and inner-city densities (people per km² of land)")
+  knitr::kable(caption = "Frame towers per type at different conurbation sizes (people) and inner-city densities (people per km² of land, 1 km kernel)")
+```
+
+```{r}
+#| label: tbl-sens-suburb
+purrr::map(sort(unique(c(2000, 2500, DRAFT_B$suburb_density, 3500))), \(t)
+  frame_towers |> dplyr::mutate(type = reclass(frame_towers, suburb_density = t)) |>
+    dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
+  purrr::list_rbind() |>
+  tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
+  knitr::kable(caption = "Frame towers per type at different suburb lines in smaller cities (people per km² of land around the church)")
 ```
 
 **What moves and what does not.** The village and town lines trade towers
 between neighbouring rural types, as expected. The urban types depend only
-on the conurbation and inner-city lines. The total in urban centres depends
-on neither, because the urban centres themselves are fixed by the
+on the conurbation, inner-city and suburb lines. The total in urban centres depends
+on none of them, because the urban centres themselves are fixed by the
 international definition.
 
 ### Examples and maps

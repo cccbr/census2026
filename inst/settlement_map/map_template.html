@@ -49,8 +49,9 @@ a{color:var(--link)}
     settlement type it is given. Larger dots have more bells. Click a dot for the
     measures behind its type. The types are provisional: see the analysis chapter
     <em>Choosing a classification</em>.</p>
-    <p>Densities are people per km&sup2; of land around the church (a kernel whose
-    weight halves every 250 m). An urban centre is a continuous built-up area of
+    <p>Densities are people per km&sup2; of land, with nearer people counting
+    more: around the church, the weight halves every 500 m; for the district,
+    used only for the inner-city line, every 1 km. An urban centre is a continuous built-up area of
     50,000 or more, as traced by the international Degree of Urbanisation.</p>
     <p>Tower data from <a href="https://dove.cccbr.org.uk">Dove's Guide for Church Bell
     Ringers</a>, &copy; the Central Council of Church Bell Ringers, licensed
@@ -95,9 +96,9 @@ a{color:var(--link)}
       var rows = [
         ["Type", D.types[t] + " <span style=\"color:#5f6368\">(1988: " + D.types1988[t] + ")</span>"],
         ["Bells", r[F.bells]],
-        ["Density around the church", fmt(r[F.density]) + " per km&sup2;"],
+        ["Density around the church (500 m kernel)", fmt(r[F.density]) + " per km&sup2;"],
+        ["Density of the district (1 km kernel)", fmt(r[F.district]) + " per km&sup2;"],
         ["Urban centre", r[F.centre] === null ? "none" : fmt(D.centres[r[F.centre]][0]) + " people"],
-        ["City average density", r[F.centre] === null ? "" : fmt(D.centres[r[F.centre]][1]) + " per km&sup2;"],
         ["Bells at other towers within 1 km", r[F.other_bells]],
         ["Wider area (8 km kernel)", fmt(r[F.region]) + " per km&sup2;"]
       ];

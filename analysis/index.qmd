@@ -13,17 +13,18 @@ source(here::here("scripts", "00_setup.R"))
 
 The analytical narrative for the 2026 Ringing Census.
 
-The first three chapters prepare the chased sample:
+The first four chapters prepare the chased sample:
 
 1. **Towers and the places they stand in.** The measures of each tower's
-   surroundings, how they relate to each other, and what ring size says
-   about a place.
-2. **Choosing a classification.** Named place types, built from place
+   surroundings, and how they relate to each other.
+2. **What the bells remember.** A side quest: what ring size says about the
+   places the bells were cast for. It does not set the classification.
+3. **Choosing a classification.** Named place types, built from place
    measures only, checked against 1988 and against towers people know.
-3. **Choosing a sampling method.** A simulation comparing ways of drawing
+4. **Choosing a sampling method.** A simulation comparing ways of drawing
    the chased sample.
 
-All three share their data and provisional choices through
+All four share their data and provisional choices through
 `analysis/_common.R`. Quarto's freeze does not notice changes to that file,
 so after changing it, render each chapter on its own
 (`quarto render analysis/<chapter>.qmd`), or delete `analysis/_freeze/`

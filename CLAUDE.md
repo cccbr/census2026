@@ -442,12 +442,16 @@ sample (Q-023, needed before the draw):
   2026-10-10). Script 08 builds `tower_context_dove_2026-09-19.parquet`,
   now with 250 m and 500 m measures and contiguous-settlement measures
   (D-027). Mark re-runs 08 on his machine.
-- The analysis book has three settlement chapters sharing
-  `analysis/_common.R`: `tower-context.qmd` (structure, ring size, scales,
-  decision tree, frontier model), `settlement-classes.qmd` (1988 shares,
-  Draft A set aside, Draft B proposed, known-towers sense check) and
-  `sampling-design.qmd` (design simulation).
-- The classification is place-only (D-028). Draft B awaits Mark's view.
+- The analysis book has four settlement chapters sharing
+  `analysis/_common.R`: `tower-context.qmd` (the measures and their
+  structure), `bells-remember.qmd` (side quest: ring size against the
+  measures, scales, decision trees, frontier model, walking-world idea),
+  `settlement-classes.qmd` (1988 shares, Draft A set aside, Draft B,
+  known-towers sense check) and `sampling-design.qmd` (design simulation).
+- The classification is place-only (D-028), and its scales are chosen to
+  describe places today, never because they fit ring size (D-035): the
+  500 m kernel for town, village and small-city suburb lines, the 1 km
+  kernel for the inner-city line. Draft B is the working classification.
 - `data/reference/known_towers.csv` holds towers people know, with what each
   feels like. A draft special-case tower list (81 rows, all `proposed`) is in
   `data/reference/special_towers_draft.csv` (Q-022).

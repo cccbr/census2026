@@ -47,6 +47,7 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-032 | Town and village lines on the 250 m kernel (475 and 175), not the 1 km circle; city-core test keeps its circle | Provisional |
 | D-033 | Draft B lines are land densities in the 250 m kernel (village 300, town 600, inner city 8,000 per km²); no centre-point methods; small-city suburbs a candidate only; Welwyn agrees | Provisional |
 | D-034 | Small-city suburbs adopted; inner-city line 5,000 per km²; aligning with 1988's types a high priority; settlement map published via Pages | Provisional |
+| D-035 | Classification scales chosen for today's places: 500 m kernel for town (420), village (200) and small-city suburb (3,000, one line for every city); 1 km kernel for inner city (4,000). Ring-size analysis moved to a side-quest chapter | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
@@ -86,7 +87,7 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-015 | Does the network dependency need naming in the DPIA and privacy notice? | The committee has been informed (transparency). DPIA coverage still to be confirmed |
 | Q-018 | Confirm the volunteer-country list | Currently Australia and USA, marked `expected` in the reference CSV. Needs an owner who maintains it |
 | Q-022 | **Special-case towers**: who is on the list, and are they a certainty stratum or handled outside the chased sample? | Draft list (81 rows, all `proposed`) in `data/reference/special_towers_draft.csv`. Since D-031 a backstop to the measured historic city cores, which find 21 of its 24 society and City rows. Needed before the draw |
-| Q-023 | **The settlement classification used to stratify the chased sample, and the sampling design** | Place measures only (D-028). Working proposal: Draft B in `analysis/settlement-classes.qmd` (urban centres for cities, suburbs and inner cities; people within 1 km for towns, villages and small villages or hamlets). Working classification per D-029; to be validated with the analysis volunteers' known towers and, ideally, register data on towers with no band of their own. Historic city cores adopted per D-031. Sampling: stratified by type x ring size recommended (tentative), cores as one stratum. Designs compared in `analysis/sampling-design.qmd`. Needed before the draw |
+| Q-023 | **The settlement classification used to stratify the chased sample, and the sampling design** | Place measures only (D-028). Working proposal: Draft B in `analysis/settlement-classes.qmd` (urban centres for cities, suburbs and inner cities; density around the church for towns, villages and small villages or hamlets). Working classification per D-029, scales per D-035; to be validated with the analysis volunteers' known towers and, ideally, register data on towers with no band of their own. Historic city cores adopted per D-031. Sampling: stratified by type x ring size recommended (tentative), cores as one stratum. Designs compared in `analysis/sampling-design.qmd`. Needed before the draw |
 
 ## Open — needed before analysis
 

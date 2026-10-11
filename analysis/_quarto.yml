@@ -16,6 +16,7 @@ book:
   chapters:
     - index.qmd
     - tower-context.qmd
+    - bells-remember.qmd
     - settlement-classes.qmd
     - sampling-design.qmd
 
