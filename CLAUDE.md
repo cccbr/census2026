@@ -455,5 +455,12 @@ sample (Q-023, needed before the draw):
 Still outstanding:
 
 - `scripts/03` (society crosswalk) is not written; it waits on Q-006.
-- The QuestionPro widget documentation lives in `inst/questionnaire/`; its
-  build products are gitignored.
+- The QuestionPro widgets live in `inst/questionnaire/`: the single picker
+  `tower_autocomplete.js` and the multi picker `tower_multipicker.js`
+  (D-030). **Never hand Mark a source file to paste.** QuestionPro refuses
+  JavaScript Logic above a limit between 19,012 and 20,841 characters, so
+  `scripts/09_build_widget_paste.R` strips comments into
+  `inst/questionnaire/build/*.paste.js` (gitignored). `foldKey()` now has
+  three copies (both widgets and `R/text.R`) that must change together.
+  Platform behaviour learned the hard way is in `tower-autocomplete.md`;
+  read it before changing either widget.

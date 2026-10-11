@@ -1,5 +1,11 @@
 # Tower autocomplete — work list
 
+Covers both widgets: the single picker (`tower_autocomplete.js`) and the multi
+picker (`tower_multipicker.js`). Unless a step says otherwise, it applies to
+both. **Paste the builds from `scripts/09_build_widget_paste.R`, never the
+source files**: QuestionPro refuses JavaScript Logic above a limit between
+19,012 and 20,841 characters.
+
 Ordered for single-step debugging. One change, pasted, tested, confirmed,
 before the next. Debugging inside QuestionPro is slow and gives poor error
 feedback, so batching changes makes failures impossible to attribute.
@@ -24,6 +30,13 @@ anything about behaviour.
 - **External hosting proven.** fetch and script-tag both permitted; no CSP
   obstacle.
 - **Payload size problem resolved** by D-015 — this was validation test 3.
+- **Multi picker** (D-030). m2.0 works on a real phone up to its cap of 12,
+  with choosing done in a full-screen panel. Three earlier layouts failed on
+  the phone; why is in `tower-autocomplete.md`, platform item 12.
+- **Script size limit found**: between 19,012 and 20,841 characters. Paste
+  builds now come from `scripts/09_build_widget_paste.R`.
+- **One picker per block.** QuestionPro runs every question's Pre JS when a
+  block loads, so two pickers in one block race for inputs.
 
 ---
 
@@ -49,6 +62,12 @@ setter.call(native, item.value);
 native.dispatchEvent(new Event("input", { bubbles: true }));
 ```
 
+## Step 1b — multi picker value capture
+
+Choose two or three towers in m2.0, submit, and confirm the export holds
+`Display [RingID] | Display [RingID]`. Only the bare-ID format of an early
+test version (`17319;4640`) has been seen in an export so far.
+
 ## Step 2 — bind to the question explicitly
 
 v4 takes the **first** visible text input wider than 50 px. Correct on a
@@ -59,7 +78,9 @@ in the inspector and set:
 inputSelector: 'input[name="q_12345"]'
 ```
 
-Until that is set, do not put another text question on the same page.
+Until that is set, do not put another text question on the same page — or
+in the same block, since every question's Pre JS in a block runs when it
+loads. Inspect from the `surveyFrame` console context, not `top`.
 
 ## Step 3 — mobile
 
@@ -82,12 +103,20 @@ Select a tower, go forward a page, come back.
   needs no network — the list is already checked for this tab (D-025); the poll
   needs to keep running rather than stopping at first bind.
 
+The multi picker rebuilds its list from the native value, so if QuestionPro
+does re-run Pre JS, going back restores the towers. Untested.
+
 ## Step 5 — "my tower isn't listed"
 
 Required by D-008, not yet built. Proposed: a persistent row at the foot of the
 results and an option shown when a search returns nothing, switching to free
 text and writing `NOT LISTED: <what they typed>`. One field, and the prefix
 makes escapes trivially separable for reconciliation.
+
+For the multi picker, the escape needs its own form: a row in the panel that
+adds a `NOT LISTED: <text>` entry alongside the chosen towers, in the same
+` | `-separated value. Watch the size: the multi picker's paste build has
+about 1,100 characters of headroom below 19,012.
 
 ## Step 6 — keyboard navigation
 
@@ -111,6 +140,9 @@ square brackets breaks parsing — and couples the analysis key to the display
 format. Needs Vicki to add a hidden question. Deferred while the widget is
 still being stabilised (D-013).
 
+For the multi picker the hidden field would hold the RingIDs alone,
+separated by ` | `, in the same order as the visible value.
+
 ## Step 9 — production hardening
 
 - Set `FREEZE_PUBLISHED_LISTS <- TRUE` in `scripts/05` so a live list can
@@ -126,9 +158,9 @@ still being stabilised (D-013).
 
 ---
 
-## Standing risk: two normalisers
+## Standing risk: three normalisers
 
-`foldKey()` in JavaScript and `normalise_search_key()` in `R/text.R` must
+`foldKey()` in each widget and `normalise_search_key()` in `R/text.R` must
 behave identically, or index and query disagree about what a tower is called —
 surfacing only as "I can't find my tower".
 
@@ -139,6 +171,14 @@ divergence.
 ## Standing check: verify what is deployed
 
 Both the widget and the data file have been silently truncated in transit
-during development. Before fieldwork, diff the deployed script against the
-repository copy, and confirm the hosted file's header counts match what
+during development. Before fieldwork, diff each deployed script against a
+fresh build from `scripts/09_build_widget_paste.R` (not against the
+commented source), and confirm the hosted file's header counts match what
 `scripts/05` generated.
+
+## Watch: slow list fetch
+
+On 2026-10-10 the fetch from GitHub Pages timed out after 3 seconds on two
+loads in a row, against 61 ms in September. The stored copy covered it, but a
+first-time respondent would wait up to 20 seconds. Next time, read the Network
+tab entry for `towers_dove_…txt`: stalled, blocked, or never sent.

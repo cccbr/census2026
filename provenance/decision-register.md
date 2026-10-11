@@ -42,6 +42,8 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-027 | Tighter measures (250 m and 500 m kernels, 500 m circle) and contiguous-settlement measures (urban centre, urban cluster, rural cluster, distance to nearest urban centre) | Provisional |
 | D-028 | The settlement classification uses place measures only, never ring size | Provisional |
 | D-029 | Working classification is Draft B: town line 1,500 people within 1 km; conurbation line 575,000 (in a gap in centre sizes, keeping Bristol a conurbation); Welwyn accepted as a known disagreement | Provisional |
+| D-030 | Multi-tower questions use a multi picker: composite `Display [RingID]` per tower, separated by ` \| `, at most 12 | Provisional |
+| D-031 | Historic city core is a place type: in an urban centre with 30+ bells at other towers within 1 km, or on the special list (now a backstop) | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
@@ -73,15 +75,15 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | --- | --- | --- |
 | D-010 | Ring or tower as the respondent's unit; the 13 two-ring towers | **Deferred by the committee 2026-09-20.** D-012 handles the picker; analysis still needs an answer |
 | Q-001 | Dove CC BY-SA attribution in the QuestionPro about/privacy text | Wording is `DOVE_ATTRIBUTION` in `scripts/00_setup.R` |
-| Q-002 | Widget validation | **Value capture: passed** (backend shows `Amersham, S Mary V (12) — Buckinghamshire [4914]`). **iPhone 13 Safari: passed.** Layout fix v4.3 tested desktop and mobile. **Outstanding: back-navigation** (Q-011). Cause of the 19 Sept live-mode failure not recorded — most likely the header-format mismatch |
+| Q-002 | Widget validation | **Value capture: passed** (backend shows `Amersham, S Mary V (12) — Buckinghamshire [4914]`). **iPhone 13 Safari: passed.** Layout fix v4.3 tested desktop and mobile. **Multi picker (D-030):** m2.0 works on a real phone; its composite value is still to be checked in an export. **Outstanding: back-navigation** (Q-011). Cause of the 19 Sept live-mode failure not recorded — most likely the header-format mismatch |
 | Q-011 | Does QuestionPro re-run Pre JS on back-navigation? | If not, a respondent who goes back gets an uncontrolled free-text field |
 | Q-012 | **Date by which the widget-vs-fallback decision is final** | Less urgent now the widget works end to end, but still unset |
 | Q-013 | Ship without keyboard navigation and screen-reader support? | A scope decision. Respondent population skews older |
 | Q-014 | ~~Hosting~~ | **Resolved by D-021.** Remaining work: make repo public, enable Pages from `/docs`, update `CFG.dataUrl`, retire the personal-account test host |
 | Q-015 | Does the network dependency need naming in the DPIA and privacy notice? | The committee has been informed (transparency). DPIA coverage still to be confirmed |
 | Q-018 | Confirm the volunteer-country list | Currently Australia and USA, marked `expected` in the reference CSV. Needs an owner who maintains it |
-| Q-022 | **Special-case towers**: who is on the list, and are they a certainty stratum or handled outside the chased sample? | Draft list (81 rows, all `proposed`) in `data/reference/special_towers_draft.csv`. Needed before the draw |
-| Q-023 | **The settlement classification used to stratify the chased sample, and the sampling design** | Place measures only (D-028). Working proposal: Draft B in `analysis/settlement-classes.qmd` (urban centres for cities, suburbs and inner cities; people within 1 km for towns, villages and small villages or hamlets). Working classification per D-029; to be validated with the analysis volunteers' known towers and, ideally, register data on towers with no band of their own. A measure-based "historic city core" type is offered but not adopted. Designs compared in `analysis/sampling-design.qmd`. Needed before the draw |
+| Q-022 | **Special-case towers**: who is on the list, and are they a certainty stratum or handled outside the chased sample? | Draft list (81 rows, all `proposed`) in `data/reference/special_towers_draft.csv`. Since D-031 a backstop to the measured historic city cores, which find 21 of its 24 society and City rows. Needed before the draw |
+| Q-023 | **The settlement classification used to stratify the chased sample, and the sampling design** | Place measures only (D-028). Working proposal: Draft B in `analysis/settlement-classes.qmd` (urban centres for cities, suburbs and inner cities; people within 1 km for towns, villages and small villages or hamlets). Working classification per D-029; to be validated with the analysis volunteers' known towers and, ideally, register data on towers with no band of their own. Historic city cores adopted per D-031. Sampling: stratified by type x ring size recommended (tentative), cores as one stratum. Designs compared in `analysis/sampling-design.qmd`. Needed before the draw |
 
 ## Open — needed before analysis
 
@@ -94,6 +96,7 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-007 | Minimum cell size and suppression rules | In the data layer, not the report layer |
 | Q-017 | **What happens to responses from rings outside the frame?** | A consequence of D-018. Such responses have no denominator, so cannot enter the weighted estimate. Proposal: retain and report descriptively, excluded from estimation. Needs deciding before the first one arrives |
 
+| Q-024 | **Shared bands: how rosters are de-duplicated, and how Golden Ticket weights treat them** | Arises from D-030. Towers linked by any tower rep's or ringer's list form clusters (connected components). Candidate rules for a cluster's roster: the largest return in it, or a union built from ringers' own tower lists. A ringer in a shared band can be reached through any of its towers, which changes their selection probability. Not decided |
 | Q-020 | Bells at a tower with two frame rings: max or sum | Affects Gresford and Rugby only, on `dove_2026-09-19`. Code uses max |
 | Q-021 | GHSL population epoch | E2020 in use. JRC describes 2025 and 2030 as "projections to 2025 and 2030 derived from CIESIN GPWv4.11" |
 

@@ -4,7 +4,10 @@
 // Loads the tower list from an external file instead of embedding it, because
 // QuestionPro caps JS Logic at ~16-32k characters and content blocks at 10,000.
 //
-// Set CFG.dataUrl below, then paste this whole file into Pre JavaScript Logic.
+// DO NOT PASTE THIS FILE. QuestionPro rejects JavaScript Logic over about
+// 19-20k characters (19,012 accepted, 20,841 rejected), and this commented
+// source is at the limit. Paste the build from scripts/09_build_widget_paste.R:
+// inst/questionnaire/build/tower_autocomplete.paste.js.
 // Full notes: inst/questionnaire/tower-autocomplete.md
 // =============================================================================
 

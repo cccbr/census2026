@@ -50,6 +50,7 @@ latest".
 | `06_build_tower_locations.R` | One row per tower with its coordinates | `data/curated/tower_locations_<snapshot>.parquet` | seconds |
 | `07_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
 | `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
+| `09_build_widget_paste.R` | Strips comments from the two QuestionPro widgets so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | `inst/questionnaire/build/*.paste.js` | seconds |
 
 ### What the settlement measures are
 

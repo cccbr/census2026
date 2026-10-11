@@ -833,3 +833,91 @@ know. Mark intends to validate them with the other analysis volunteers.
 centre, five or more frame towers within 1 km) would catch Bristol's centre
 and most of the special list without a list. Offered, not adopted.
 
+---
+
+## D-030 — Several towers are captured with a multi picker, one composite value per tower
+
+**2026-10-11 · Provisional (Mark)** · extends D-013; bears on D-010
+
+*Drafted by Claude at Mark's request. The reasoning is to be confirmed by Mark
+in his own words.*
+
+**Decision.** Questions that ask for more than one tower use the multi
+picker, `inst/questionnaire/tower_multipicker.js`. The two target questions
+are "Which towers would consider you a band member?" and "Where did you ring
+in census week?". The picker saves one composite value per tower, the same
+`Display [RingID]` string the single picker saves (D-013), in the order
+chosen, separated by ` | `. It accepts at most 12 towers.
+
+**Why ask at all.** Multi-tower bands are common. A count of "other towers"
+would show that bands are shared, but not which returns overlap, so rosters
+could not be de-duplicated (Q-024).
+
+**Alternatives considered.**
+
+| Option | Why not chosen |
+| --- | --- |
+| Repeated single pickers, one per page, with "another tower?" between | Proven and needs no new code, but five towers means ten screens. Kept as the fallback |
+| A checklist of the nearest towers, with search for the rest | Needs coordinates in the list file and the home tower carried between pages. Mark: the plain multi picker "will work fine when someone wants to name a tower that isn't close, e.g. a university ringer referring to back home". Could be added later |
+| A count of towers only, with enumerators recording clusters for chased towers | The minimum if the widget failed; loses which towers overlap |
+| Bare RingIDs (`4914;2575`) instead of composite values | Unreadable in the export. Chosen at first because the text field's length limit was unknown; a 1,000-character value then saved intact, and twelve composite values need about 750 |
+
+**Separator.** The pipe was Mark's suggestion. It cannot occur in a label,
+because the tower list file uses it as its field separator. To parse, split
+on `|`, trim, and take the RingID from the `[...]` at the end of each part,
+so a bracket inside a dedication cannot break it.
+
+**Cap of 12.** Mark: "seems reasonable. I guess the max case would be where
+some[one] happens to have been on a tour in this week." It bounds both the
+burden on one respondent and the length of the saved value.
+
+**Layout.** Choosing happens in a full-screen panel; the page shows only a
+two-line summary and a button. Three layouts that kept the growing list on
+the page failed on a real phone, because QuestionPro scrolls the question
+inside its own panel and the floating list covered both the search box and
+Next. Recorded here because it is why the widget looks different from the
+single picker, not because it is a methodological choice.
+
+**Known cost.** The composite format inherits D-013's brittleness: the
+analysis key is coupled to the display format. The hidden-RingID field
+(`todo.md` step 8) would fix both pickers together.
+
+**Evidence.** Phone and desktop tests, 2026-10-10 and 2026-10-11, in the
+QuestionPro preview and on Mark's phone. An early version's bare-ID value
+(`17319;4640`) reached the export; m2.0's composite value has not yet been
+checked there.
+
+## D-031 — Historic city cores are a place type, found by a measure
+
+**2026-10-11 · Provisional (Mark)** · bears on Q-022, Q-023; amends D-029
+
+*Drafted by Claude at Mark's request. The reasoning is to be confirmed by Mark
+in his own words.*
+
+**Decision.** Draft B gains a seventh type, "Historic city core", replacing
+"Society or city-core tower". A tower is in a historic city core if it
+stands in an urban centre with at least 30 bells at *other* frame towers
+within 1 km, or if it is on the special list as a society, City of London or
+central London tower (the list is now a backstop).
+
+**Why.** Where towers cluster in an old city centre, bands are shared and a
+tower may have no band of its own. Richard Heys's register shows several
+central Bristol ten-bell towers with no registered ringers for this reason.
+Mark liked identifying these places by measure, and suspected bell density
+would show them more clearly than tower density.
+
+**Why other towers' bells only.** Bells within 1 km including the tower's own
+correlate about 0.9 with its own ring size, which would break D-028. Other
+towers' bells correlate about 0.2, much as other towers do. On a trial run,
+the measure finds 78 frame towers, including 21 of the 24 on the special
+list; the list adds 3 (Westminster).
+
+**Considered and parked.** Bell-metal (tenor weight) density, which Claude
+raised in discussing whether heavier rings belong to wider areas. Mark: not
+to complicate the classification with it now.
+
+**Consequences.** The historic city cores map to 1988's "Large City". In the
+sampling design they form one stratum whatever their ring size.
+
+**Encoded in:** `R/settlement.R` (`classify_settlement_b`),
+`analysis/_common.R` (`DRAFT_B$core_other_bells`, `other_bells_1km`).
