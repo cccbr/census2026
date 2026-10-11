@@ -39,7 +39,7 @@ a{color:var(--link)}
 .matches button{display:block;width:100%;text-align:left;background:none;border:0;padding:3px 2px;color:var(--link);cursor:pointer;font:inherit}
 @media (max-width:600px){.panel{top:auto;bottom:12px;max-height:45vh}}
 /* Monochrome base map, so the type colours carry the meaning. */
-.leaflet-tile-pane{filter:grayscale(1) contrast(0.9) brightness(1.05)}
+.grey .leaflet-tile-pane{filter:grayscale(1) contrast(0.9) brightness(1.05)}
 </style>
 </head>
 <body>
@@ -54,13 +54,13 @@ a{color:var(--link)}
   <p class="keyhead">Bold outline: tower cluster</p>
   <p class="keyhead">Bells</p>
   <ul class="shapes" id="shapes"></ul>
-  <ul class="legend"><li><label><input type="checkbox" id="ur" checked> Show unringable rings (faded)</label><span class="count" id="urcount"></span></li></ul>
+  <ul class="legend"><li><label><input type="checkbox" id="grey" checked> Grey background map</label></li><li><label><input type="checkbox" id="ur" checked> Show unringable rings (no outline)</label><span class="count" id="urcount"></span></li></ul>
   <details>
     <summary>About this map</summary>
     <p>Each dot is a tower in the census sampling frame, coloured by the draft
     settlement type it is given. Its shape shows the number of bells: the more
 bells, the more sides, and the more area, since every shape spans the same
-width. Rings of 5 or fewer are small circles. Faded shapes are unringable
+width. Rings of 5 or fewer are small circles. Shapes with no outline are unringable
 rings: outside the sampling frame, shown so that every tower with bells can
 be seen. Each is given the type its own place would have, by the same rule,
 but none affects any other tower's type. Click a dot for the
@@ -178,14 +178,15 @@ but none affects any other tower's type. Click a dot for the
     var m = new ShapeMarker([r[F.lat], r[F.lon]], {
       radius: R * sh.scale,          // used for clicks and hover
       sides: sh.sides, scale: sh.scale,
-      color: r[F.cl] === 1 ? "#000000" : (ur ? "#00000040" : "#00000088"),
-      weight: r[F.cl] === 1 ? 2.2 : 0.7,
-      fillColor: D.colours[t], fillOpacity: ur ? 0.3 : 0.85
+      // Unringable rings: full colour, no outline.
+      color: ur ? "#00000000" : (r[F.cl] === 1 ? "#000000" : "#00000088"),
+      weight: ur ? 0 : (r[F.cl] === 1 ? 2.2 : 0.7),
+      fillColor: D.colours[t], fillOpacity: 0.85
     });
     m.bindPopup(function () {
       var rows = [
         ["Type", D.types[t] + " <span style=\"color:#5f6368\">(1988: " + (r[F.cl] === 1 ? "Large City" : D.types1988[t]) + ")</span>"],
-        ["Ringable", ur ? "No: outside the frame, shown faded" : ""],
+        ["Ringable", ur ? "No: outside the frame, shown without an outline" : ""],
         ["Bells", r[F.bells]],
         ["Density within a short walk (250 m kernel)", fmt(r[F.density]) + " per km&sup2;"],
         ["Density beyond a short walk", r[F.beyond] === null ? "" : fmt(r[F.beyond]) + " per km&sup2;"],
@@ -213,6 +214,9 @@ but none affects any other tower's type. Click a dot for the
   var counts = D.types.map(function () { return 0; });
   D.rows.forEach(function (r) { if (r[F.ur] !== 1) counts[r[F.type]]++; });
   var urBox = document.getElementById("ur");
+  var greyBox = document.getElementById("grey");
+  var setGrey = function () { document.getElementById("map").classList.toggle("grey", greyBox.checked); };
+  greyBox.addEventListener("change", setGrey); setGrey();
   var typeOn = D.types.map(function () { return true; });
   // Re-add unringable before frame layers, so frame towers stay on top.
   var sync = function (i) {
