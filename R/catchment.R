@@ -203,6 +203,57 @@ point_window_sums <- function(focal, source, measures, tol = 0.01) {
   tibble::as_tibble(out)
 }
 
+#' Measure names: the one place that reads them
+#'
+#' Measures are named by type and distance: "k2km" is a kernel halving every
+#' 2 km, "r500m" a 500 m circle. Distances under 1 km are written in metres.
+#' These helpers accept a bare measure name or a full column name such as
+#' "density_land_k250m", and stop on anything they cannot read, so a new
+#' naming pattern cannot be misread silently.
+measure_part <- function(x) {
+  m <- sub("^.*_", "", x)
+  ok <- grepl("^[kr][0-9]+(m|km)$", m)
+  if (!all(ok)) stop("Not a measure name: ", paste(x[!ok], collapse = ", "), call. = FALSE)
+  m
+}
+
+#' Distance in metres encoded in a measure name ("k250m" -> 250, "r2km" -> 2000)
+measure_metres <- function(x) {
+  m <- measure_part(x)
+  num <- as.numeric(sub("^[kr]([0-9]+)(m|km)$", "\\1", m))
+  ifelse(endsWith(m, "km"), num * 1000, num)
+}
+
+#' "kernel" or "radius"
+measure_type <- function(x) {
+  ifelse(startsWith(measure_part(x), "k"), "kernel", "radius")
+}
+
+#' Plain-English label: "250 m kernel", "1 km circle"
+measure_label <- function(x) {
+  d <- measure_metres(x)
+  paste(ifelse(d < 1000, paste(d, "m"), paste(d / 1000, "km")),
+        ifelse(measure_type(x) == "kernel", "kernel", "circle"))
+}
+
+#' Radius holding half a measure's weight, over uniform ground
+#'
+#' A way to compare kernels and circles on one scale of "how far it really
+#' looks". For a circle of radius R it is R / sqrt(2). For an exponential
+#' kernel it is about 2.42 half-distances: (1 + x) exp(-x) = 0.5 at x = 1.678,
+#' where x = lambda r and lambda = log(2) / half-distance.
+measure_half_mass_m <- function(x) {
+  d <- measure_metres(x)
+  x_half <- stats::uniroot(\(x) (1 + x) * exp(-x) - 0.5, c(0.1, 10))$root
+  ifelse(measure_type(x) == "kernel", x_half * d / log(2), d / sqrt(2))
+}
+
+#' Measure name from type and distance (the inverse of the helpers above)
+measure_name <- function(type, param_m) {
+  paste0(ifelse(type == "kernel", "k", "r"),
+         ifelse(param_m < 1000, paste0(param_m, "m"), paste0(param_m / 1000, "km")))
+}
+
 #' Towers to enrich: every Dove tower in a country that has a frame ring
 #'
 #' This covers frame towers and also out-of-frame towers in the same countries

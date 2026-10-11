@@ -5,11 +5,29 @@
 #
 #   smod_*         GHSL Degree of Urbanisation level 2 at the tower's 1 km cell.
 #                  The same definition is used everywhere in the world.
+#   centre_*, urban_*, rural_cluster_*
+#                  The contiguous settlement the tower's 1 km cell belongs to,
+#                  traced on the same grid with the Degree of Urbanisation's own
+#                  contiguity rules (see R/contiguity.R):
+#                    centre_pop, centre_km2   urban centre (no diagonals)
+#                    urban_pop, urban_km2     urban cluster, centres included
+#                                             (diagonals count)
+#                    rural_cluster_pop, _km2  rural cluster (a village, in the
+#                                             grid's terms)
+#                  NA where the cell is not in such a patch.
+#   centre_dist_km, centre_nearest_pop
+#                  Distance to the nearest urban centre cell (0 if inside one),
+#                  and that centre's population. NA if none within the window.
+#   settlement_window_edge
+#                  TRUE if a patch above was cut by its tracing window, so its
+#                  population is a lower bound.
 #   oa21cd, ruc21* ONS 2021 Rural Urban Classification of the tower's Output
 #                  Area. England and Wales only; NA elsewhere. Included for
 #                  completeness and comparison, not as the preferred measure.
 #   For each measure <m> in MEASURES (D-026), either an exponential kernel
-#   ("k2km" = weight halves every 2 km) or a plain radius ("r5km"):
+#   ("k2km" = weight halves every 2 km) or a plain radius ("r5km"). Distances
+#   under 1 km are written in metres ("k250m", "r500m"); R/catchment.R has
+#   helpers that read these names, so nothing else should parse them:
 #   pop_<m>        Residential population, weighted by distance.
 #   towers_<m>     Weighted count of FRAME towers, including this tower if it is
 #                  one.
@@ -55,22 +73,37 @@ GHSL_LAND_SNAPSHOT <- "ghsl_land_E2018_2026-10-10"
 #
 # Radii: plain circular counts at round distances, for communication.
 #
+# Tighter measures (added 2026-10-10, Mark): ring size correlated best with
+# the tightest measure then computed, the 1 km circle. The 250 m and 500 m
+# kernels and the 500 m circle test whether that correlation peaks at the
+# scale of a settlement's core, or keeps rising as the scale shrinks.
+#
+# A caution on the 250 m kernel. The population raster has 100 m cells, so it
+# sees about 20 cells within its half-distance, sampled at their centres. That
+# is coarse. Treat it as a measure of the core around the church, not a
+# precise one. Its people-per-km2-of-land figure is still consistent, because
+# land is summed over the same cells with the same weights.
+#
 # pop_res_m is the population raster used: 100 m wherever the reach allows,
 # 1 km for the wide kernels. A 4 km kernel reaches about 38 km, which at 100 m
 # would be 770 x 770 cells per tower. Measures sharing a resolution share one
-# window per tower, so the radii cost almost nothing beyond the 2 km kernel,
-# which already reaches about 19 km.
+# window per tower, so the new tight measures and the radii cost almost
+# nothing beyond the 2 km kernel, which already reaches about 19 km.
 MEASURES <- tibble::tribble(
-  ~measure, ~type,    ~param_m, ~pop_res_m,
-  "k1km",   "kernel",  1000,     100,
-  "k2km",   "kernel",  2000,     100,
-  "k4km",   "kernel",  4000,    1000,
-  "k8km",   "kernel",  8000,    1000,
-  "r1km",   "radius",  1000,     100,
-  "r2km",   "radius",  2000,     100,
-  "r5km",   "radius",  5000,     100,
-  "r10km",  "radius", 10000,     100
-)
+  ~type,    ~param_m, ~pop_res_m,
+  "kernel",   250,     100,
+  "kernel",   500,     100,
+  "kernel",  1000,     100,
+  "kernel",  2000,     100,
+  "kernel",  4000,    1000,
+  "kernel",  8000,    1000,
+  "radius",   500,     100,
+  "radius",  1000,     100,
+  "radius",  2000,     100,
+  "radius",  5000,     100,
+  "radius", 10000,     100
+) |>
+  dplyr::mutate(measure = measure_name(.data$type, .data$param_m), .before = 1)
 
 # Considered and deferred (D-026): a Huff / three-step floating catchment
 # allocation, splitting each population cell among the towers that reach it.
@@ -257,6 +290,39 @@ if (length(unexpected) > 0) {
   warning("Unexpected SMOD codes: ", paste(unexpected, collapse = ", "))
 }
 
+# ---- contiguous settlements on the Degree of Urbanisation grid --------------
+#
+# Which continuous built-up area each tower stands in, and how many people
+# live in it. This separates a free-standing city (St Albans) from continuous
+# suburb (Staines) where the distance measures cannot: see R/contiguity.R.
+#
+# Fast (a few minutes at most), so it runs before the slow population sums.
+SETTLEMENT_LAYERS <- tibble::tribble(
+  ~name,           ~codes,                     ~directions,
+  "centre",        list(30L),                   4L,   # urban centre: no diagonals
+  "urban",         list(c(21L, 22L, 23L, 30L)), 8L,   # urban cluster incl. centres
+  "rural_cluster", list(13L),                   8L    # rural cluster
+) |>
+  dplyr::mutate(codes = purrr::map(.data$codes, unlist))
+
+# Margin around each block of towers when tracing. 75 km comfortably holds
+# any British urban centre except London, whose population may then be a lower
+# bound for towers near its edge (flagged in settlement_window_edge). It also
+# stays inside the population tiles script 07 downloaded, which reach about
+# 77 km beyond the towers for the 8 km kernel.
+SETTLEMENT_WINDOW_M <- 75000
+
+message("Tracing contiguous settlements")
+settlements <- contiguous_settlements(
+  towers$lon, towers$lat, smod, pop_raster[["1000"]], SETTLEMENT_LAYERS,
+  nearest = "centre", half_width_m = SETTLEMENT_WINDOW_M
+)
+site <- site |>
+  dplyr::left_join(dplyr::bind_cols(tower_id = towers$tower_id, settlements),
+                   by = "tower_id")
+message(sum(site$settlement_window_edge), " towers have a settlement cut by its ",
+        "tracing window (population is a lower bound)")
+
 # ---- ONS RUC 2021 (England & Wales) -----------------------------------------
 
 oa <- sf::read_sf(fs::dir_ls(ons_dir, recurse = TRUE, glob = "*.shp"))
@@ -337,7 +403,11 @@ land_cols <- MEASURES |>
 
 # Total weighted area of each measure, in km2. A kernel holds 2*pi/lambda^2 in
 # total, less the share beyond its cutoff (KERNEL_TOL by construction). A
-# radius holds pi*r^2.
+# radius holds pi*r^2. Summing 100 m cells reproduces the kernels' area to
+# within 0.1%, even at 250 m. The 500 m circle is coarser: it holds about 78
+# cells, and the count varies by up to about 6% with where the tower sits in
+# its cell. That affects density_r500m (all surface) and land_share_r500m, but
+# not density_land_r500m, whose land is summed over the same cells.
 measure_area_km2 <- purrr::pmap_dbl(MEASURES, \(type, param_m, ...) {
   if (type == "kernel") {
     lambda <- log(2) / param_m
@@ -385,11 +455,13 @@ for (m in MEASURES$measure) {
     )
 }
 
-# Cell-centre sampling can push the land share fractionally over 1 inland.
-# Anything well over 1 means the unit check above was wrong.
+# Cell-centre sampling can push the land share over 1 inland: by under 1% for
+# most measures, and by up to about 6% for the 500 m circle (see above).
+# Anything well over that means the unit check above was wrong; a unit error
+# would be a factor of 100 or more.
 max_share <- max(dplyr::select(context, dplyr::starts_with("land_share_")), na.rm = TRUE)
 message("Largest land share: ", round(max_share, 3))
-if (max_share > 1.05) stop("Land share above 1.05: check the GHS-LAND unit.", call. = FALSE)
+if (max_share > 1.08) stop("Land share above 1.08: check the GHS-LAND unit.", call. = FALSE)
 
 context <- context |> dplyr::left_join(site, by = "tower_id")
 

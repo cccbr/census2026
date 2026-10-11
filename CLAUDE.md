@@ -429,7 +429,7 @@ Traps already hit once, worth not hitting again:
 
 ---
 
-## Current state (10 October 2026)
+## Current state (11 October 2026)
 
 Pushed to `cccbr/census2026`; the pre-commit hook is installed. The frame
 (`frame_dove_2026-09-19`) and the questionnaire tower list are built.
@@ -439,12 +439,17 @@ sample (Q-023, needed before the draw):
 
 - Script 06 builds tower locations. Script 07 fetches GHSL population, GHSL
   Degree of Urbanisation, GHSL land and ONS RUC 2021 (all snapshots dated
-  2026-10-10). Script 08 builds `tower_context_dove_2026-09-19.parquet`.
-- `analysis/tower-context.qmd` explores the measures. A follow-on chapter is
-  planned: bell-anchored class boundaries, density and isolation measures,
-  and a simulation comparing sampling designs (cell stratification, sorted
-  systematic, local pivotal).
-- A draft special-case tower list (81 rows, all `proposed`) is in
+  2026-10-10). Script 08 builds `tower_context_dove_2026-09-19.parquet`,
+  now with 250 m and 500 m measures and contiguous-settlement measures
+  (D-027). Mark re-runs 08 on his machine.
+- The analysis book has three settlement chapters sharing
+  `analysis/_common.R`: `tower-context.qmd` (structure, ring size, scales,
+  decision tree, frontier model), `settlement-classes.qmd` (1988 shares,
+  Draft A set aside, Draft B proposed, known-towers sense check) and
+  `sampling-design.qmd` (design simulation).
+- The classification is place-only (D-028). Draft B awaits Mark's view.
+- `data/reference/known_towers.csv` holds towers people know, with what each
+  feels like. A draft special-case tower list (81 rows, all `proposed`) is in
   `data/reference/special_towers_draft.csv` (Q-022).
 
 Still outstanding:

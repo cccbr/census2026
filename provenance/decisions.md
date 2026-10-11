@@ -724,3 +724,112 @@ census can test this directly.
 - `R/catchment.R`
 - `scripts/08_build_tower_context.R` (`MEASURES`)
 - `scripts/07_fetch_geography.R` (`MAX_HALF_DISTANCE_M`)
+
+## D-027 — Tighter distance measures, and contiguous-settlement measures
+
+**2026-10-11 · Provisional (Mark)** · extends D-026
+
+*Drafted by Claude at Mark's request. The reasoning is to be confirmed by Mark
+in his own words.*
+
+**Decision.** Script 08 adds three tighter measures and one new family:
+
+- a 250 m and a 500 m exponential kernel, and a 500 m plain circle (Mark);
+- the population of the contiguous settlement each tower stands in, traced
+  on the GHS-SMOD grid with the Degree of Urbanisation's own contiguity
+  rules: urban centre (edge to edge), urban cluster (corners count) and rural
+  cluster; plus the distance to the nearest urban centre (proposed by Claude;
+  Mark to confirm).
+
+**Why the tighter measures.** Ring size correlated best with the tightest
+measure first computed, the 1 km circle (Spearman 0.559). Mark called this "a
+funny smell". Tighter measures test whether the correlation peaks or keeps
+rising. On a trial run it peaked gently at about 0.6–0.7 km (the radius
+holding half the measure's weight), which reads as the scale of a
+settlement's core. To be confirmed on Mark's full run of script 08.
+
+**Why contiguity.** Kernels and circles count everyone within reach, whether
+or not they live in the same place. Mark's sense check: St Albans has "clear
+gaps between the city (/large town) and the ones around it", while Staines
+"felt like suburban spread". Distance measures scored them alike. Urban
+centres traced as continuous patches separate them: St Albans is its own
+centre of about 85,000, Staines part of London's.
+
+**Alternatives considered.**
+- *Urban clusters as the settlement.* Rejected as the main measure: joined
+  corner to corner and including suburban cells, they chain much of South
+  East England into one cluster of over 12 million. Kept as a column.
+- *ONS 2022 Built-up Areas*, which carry place names. Would separate
+  Amersham-on-the-Hill (part of Amersham) from Welwyn Garden City (not part
+  of Welwyn). Rejected for now: England and Wales only.
+
+**Caveats.** The 250 m kernel samples about 20 population cells within its
+half-distance, so it is coarse. Patches are traced within a 75 km margin;
+those cut by the margin (around London) are flagged, and their population is
+a lower bound.
+
+**Encoded in:**
+- `R/catchment.R` (measure-name helpers, half-weight radius)
+- `R/contiguity.R`
+- `scripts/08_build_tower_context.R` (`MEASURES`, `SETTLEMENT_LAYERS`)
+
+## D-028 — The settlement classification uses place measures only
+
+**2026-10-10 · Provisional (Mark)** · bears on Q-023
+
+**Decision.** The classification used to stratify the chased sample, and to
+report results, is built from measures of the place only. Ring size may check
+it, but does not define it.
+
+**Why.** In Mark's words, including the number of bells "muddies things".
+What should be optimised is "clarity of understanding and communication of a
+concept, that concept being 'what sort of a place is it that these bells are
+in'", knowing that it will be used "orthogonally to number of bells in any
+tower-keyed attributes" and for stratifying the sample.
+
+**Alternative considered.** An earlier draft used ring size inside the rules,
+to separate a conurbation's own churches from absorbed villages, as 1988's
+"inner city" against "large city" did. That contrast is still available by
+crossing the place type with ring size.
+
+**Encoded in:** `R/settlement.R`, `analysis/_common.R`.
+
+## D-029 — Draft B is the working classification, with a town line of 1,500
+
+**2026-10-11 · Provisional (Mark)** · bears on Q-023; builds on D-027, D-028
+
+*Drafted by Claude at Mark's request. The reasoning is to be confirmed by Mark
+in his own words.*
+
+**Decision.** The working settlement classification is Draft B
+(`R/settlement.R`, `analysis/_common.R`):
+
+- society or city-core towers by the special list;
+- inside an urban centre (contiguous, 50,000+): inner city or suburban in a
+  conurbation, otherwise city or large town;
+- elsewhere, by people within 1 km: town from 1,500, village from 500,
+  otherwise small village or hamlet.
+
+**Thresholds.**
+- *Town line 1,500* (Mark). It best matches the share of towns in 1988,
+  inferred from 1988's Table 11.2 at about 28%.
+- *Conurbation line 575,000.* Mark's requirement: Bristol on the conurbation
+  side, because Richard Heys's register shows several of its central
+  ten-bell towers with no registered ringers, rung as a cluster. Claude set
+  the line midway (log scale) in the gap between Nottingham (about 636,000)
+  and Leicester (about 513,000), so small data changes cannot move a city
+  across it.
+- *Inner-city density 7,000 per km² (500 m kernel) and village line 500*:
+  unchanged from the draft.
+
+**Known disagreement accepted.** Welwyn reads as a town but feels like a
+village. Mark: "Welwyn is to WGC as Old Amersham is to Amersham", and
+"they're very comparable in truth".
+
+**Caveat Mark raised.** The thresholds are informed by a few towers people
+know. Mark intends to validate them with the other analysis volunteers.
+
+**Open alternative.** A measure-based "historic city core" type (in an urban
+centre, five or more frame towers within 1 km) would catch Bristol's centre
+and most of the special list without a list. Offered, not adopted.
+

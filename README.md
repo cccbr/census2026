@@ -49,18 +49,23 @@ latest".
 | `05_export_questionnaire_towers.R` | Publishes the tower list the questionnaire's search box fetches | `docs/` (served by GitHub Pages) | seconds |
 | `06_build_tower_locations.R` | One row per tower with its coordinates | `data/curated/tower_locations_<snapshot>.parquet` | seconds |
 | `07_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
-| `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–30 min |
+| `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
 
 ### What the settlement measures are
 
-Script 08 describes the area around each tower in two ways.
+Script 08 describes the area around each tower in three ways.
 
 - **A decay kernel** counts people, towers or bells, giving nearer ones more
-  weight. The weight halves every 1, 2, 4 or 8 km depending on the version.
-  The 2 km version is the main one, chosen from published data on how far
-  people travel to weekly voluntary activities.
-- **A plain circle** counts everything within 1, 2, 5 or 10 km. It is easier
-  to explain, but its edge is arbitrary.
+  weight. The weight halves every 250 m, 500 m, 1, 2, 4 or 8 km depending on
+  the version. The 2 km version is the main catchment measure, chosen from
+  published data on how far people travel to weekly voluntary activities.
+- **A plain circle** counts everything within 500 m, 1, 2, 5 or 10 km. It is
+  easier to explain, but its edge is arbitrary.
+- **A contiguous settlement** is the continuous built-up area the tower
+  stands in, traced on the international Degree of Urbanisation grid with
+  that scheme's own rules, with the number of people in it. Unlike the
+  kernels and circles, it follows the settlement's own edge, so it can tell a
+  free-standing city from a suburb.
 
 From these it derives people per tower, people per bell, people per km² of
 land, and how much of the area is sea. It also records two ready-made
@@ -68,8 +73,12 @@ urban–rural classes for comparison: the international Degree of Urbanisation
 (from the EU's Global Human Settlement Layer) and, for England and Wales, the
 ONS 2021 Rural Urban Classification.
 
-The reasoning, and the alternatives considered, are in decision D-026 in
-`provenance/decisions.md`.
+Measure names follow one pattern: `k` for kernel or `r` for circle, then the
+distance (`k250m`, `r2km`). Only the helpers in `R/catchment.R` read these
+names; nothing else should parse them.
+
+The reasoning, and the alternatives considered, are in decisions D-026 and
+D-027 in `provenance/decisions.md`.
 
 ---
 
@@ -115,7 +124,10 @@ Both are Quarto projects, each in its own folder with its own `_quarto.yml`.
 
 - **`analysis/`** is the analytical narrative, rendered as a book. Render it
   with `quarto render analysis/`. It caches results in `analysis/_freeze/`, so
-  only changed chapters re-run.
+  only changed chapters re-run. Three chapters prepare the chased sample:
+  *Towers and the places they stand in*, *Choosing a classification* and
+  *Choosing a sampling method*. They share data, provisional choices and the
+  working classification through `analysis/_common.R`.
 - **`reports/`** will produce one report per ringing association, from one
   template. It never caches, because a cached run would show one
   association's numbers under another's name.
@@ -123,6 +135,12 @@ Both are Quarto projects, each in its own folder with its own `_quarto.yml`.
 Rendered output and caches (`_output/`, `_freeze/`) are not committed. They
 contain computed results, and they can always be rebuilt from code plus the
 named snapshots.
+
+**The cache does not notice everything.** Quarto re-runs a chapter only when
+the chapter's own file changes. It does not notice a change to
+`analysis/_common.R`, to a function in `R/`, or to the data (for example
+after re-running script 08). After any of those, re-render with
+`quarto render analysis/ --cache-refresh`.
 
 Two set-up details make rendering work, because Quarto runs R from inside
 each folder rather than the repository root:
@@ -183,6 +201,7 @@ Contributors using Claude will find more detailed working rules in
 | Quarto said `knitr` or `rmarkdown` was missing | The folder's `.Rprofile` is missing; renv was not active |
 | Quarto could not find `scripts/00_setup.R` | The chapter lacks its `here::i_am()` line |
 | Script 08 stopped on a GHSL land tile's extent | Fixed. Land tiles are trimmed where mostly sea; the check now accepts that |
+| A chapter showed old numbers after script 08 was re-run | The cache does not notice data changes. Re-render with `--cache-refresh` |
 
 After installing a package, run `renv::snapshot()`. Before committing, run
 `renv::status()`. A package used but never snapshotted works on your machine

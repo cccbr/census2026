@@ -1,0 +1,388 @@
+---
+title: "Choosing a sampling method"
+---
+
+```{r}
+#| label: setup
+#| include: false
+# here() would stop at analysis/, which has its own _quarto.yml. Declaring
+# this file's place in the repo fixes the root at the repository itself.
+here::i_am("analysis/sampling-design.qmd")
+source(here::here("scripts", "00_setup.R"))
+source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft B
+library(BalancedSampling)   # local pivotal method; install + renv::snapshot()
+
+# ---- choices this chapter makes, all provisional ----------------------------
+N_CHASED <- 1000      # chased (Lucky Dip) sample size
+N_REPS   <- 500       # simulated draws per design
+MIN_PER_CELL <- 2     # stratified design: fewest towers per cell
+FRAME_RING_LABELS <- c("4-5", "6-7", "8-9", "10+")   # the frame starts at 4 bells
+```
+
+```{r}
+#| label: simulate
+#| include: false
+# ---- synthetic population built from 1988's published rates ----------------
+# 1988 Tables 9.2 and 9.3: share of towers with a band, and ringers per bell
+# where there is a band, by settlement type. Table 9.2 also by ring size.
+rates_1988 <- tibble::tribble(
+  ~type_1988,   ~band_pct, ~ringers_per_bell,
+  "Inner City",  63,        1.22,
+  "Suburban",    92,        1.45,
+  "Large City",  92,        1.70,
+  "Town",        92,        1.42,
+  "Village",     70,        1.24
+)
+band_by_bells_1988 <- c(`3` = 55, `4-5` = 55, `6-7` = 86, `8-9` = 92, `10+` = 95)
+BAND_ALL_1988 <- 78   # "there was a band at 78 per cent of the surveyed towers"
+
+villages <- c("Village", "Small village or hamlet")
+
+pop <- frame_towers |>
+  dplyr::mutate(
+    ring_class = droplevels(.data$ring_class),
+    type_1988 = unname(crosswalk_1988[as.character(.data$type)])
+  ) |>
+  dplyr::left_join(rates_1988, by = "type_1988") |>
+  dplyr::mutate(
+    # Combine the settlement-type and ring-size rates on the log-odds scale,
+    # centred on the 1988 overall rate.
+    p_step = stats::plogis(stats::qlogis(.data$band_pct / 100) +
+                           stats::qlogis(band_by_bells_1988[as.character(.data$ring_class)] / 100) -
+                           stats::qlogis(BAND_ALL_1988 / 100)),
+    rpb_step = .data$ringers_per_bell
+  )
+
+# Second stand-in: the same 1988 pattern, but expressed smoothly in the
+# continuous measures instead of in steps at the type boundaries. Fitted by
+# regressing the step rates on the measures.
+smooth_terms <- ~ ld + u + isolation + log(bells)
+p_fit   <- stats::glm(stats::update(smooth_terms, p_step ~ .), data = pop,
+                      family = stats::quasibinomial())
+rpb_fit <- stats::lm(stats::update(smooth_terms, rpb_step ~ .), data = pop)
+pop$p_smooth   <- stats::fitted(p_fit)
+pop$rpb_smooth <- pmax(0.5, stats::fitted(rpb_fit))
+
+make_outcome <- function(p, rpb) {
+  has_band <- stats::rbinom(length(p), 1, p)
+  ringers  <- has_band * stats::rpois(length(p), pop$bells * rpb *
+                                        stats::rgamma(length(p), shape = 4, rate = 4))
+  list(has_band = has_band, ringers = ringers)
+}
+outcomes <- list(
+  "Steps at type boundaries"   = make_outcome(pop$p_step,   pop$rpb_step),
+  "Smooth in the measures"     = make_outcome(pop$p_smooth, pop$rpb_smooth)
+)
+
+xy <- sf::sf_project("OGC:CRS84", "ESRI:54009", cbind(pop$lon, pop$lat))
+pop$east <- xy[, 1]; pop$north <- xy[, 2]
+
+N <- nrow(pop); n <- N_CHASED
+in_village <- pop$type %in% villages
+
+truth_of <- function(o) c(
+  total_ringers    = sum(o$ringers),
+  share_with_band  = mean(o$has_band),
+  ringers_per_bell = sum(o$ringers) / sum(pop$bells),
+  village_ringers  = sum(o$ringers[in_village])
+)
+
+estimate <- function(o, s, pi) {
+  w <- 1 / pi[s]
+  c(total_ringers    = sum(w * o$ringers[s]),
+    share_with_band  = sum(w * o$has_band[s]) / sum(w),
+    ringers_per_bell = sum(w * o$ringers[s]) / sum(w * pop$bells[s]),
+    village_ringers  = sum(w * o$ringers[s] * in_village[s]))
+}
+
+strata <- interaction(pop$type, pop$ring_class, drop = TRUE)
+Nh <- table(strata)
+nh <- pmin(Nh, pmax(MIN_PER_CELL, round(n * Nh / N)))
+pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
+
+# Sort order for the systematic design: type, then ring class, then density,
+# reversing direction in alternate groups ("serpentine") so neighbours in the
+# list stay similar across group boundaries.
+grp <- as.integer(interaction(pop$type, pop$ring_class, lex.order = TRUE, drop = TRUE))
+sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]]))
+
+# Place measures plus ring size. "Growth since the bells" is left out: it is
+# computed from ring size, so it would carry ring size in twice.
+spread_cov <- scale(cbind(log10(pop[[LOCAL_VAR]]), log10(pop[[REGION_VAR]]),
+                          pop$isolation, pop$coast, log(pop$bells)))
+spread_geo <- cbind(spread_cov, scale(cbind(pop$east, pop$north)))
+stopifnot("spread measures must be complete" = all(is.finite(spread_geo)))
+
+designs <- list(
+  "Simple random"                = \() list(s = sample.int(N, n), pi = rep(n / N, N)),
+  "Stratified: type x ring size" = \() {
+    s <- unlist(lapply(names(Nh), \(h) {
+      idx <- which(strata == h); idx[sample.int(length(idx), nh[[h]])] }))
+    list(s = s, pi = pi_strat)
+  },
+  "Sorted systematic"            = \() {
+    k <- N / n; start <- stats::runif(1, 0, k)
+    pos <- floor(start + k * (0:(n - 1))) + 1
+    list(s = sys_order[pos], pi = rep(n / N, N))
+  },
+  "Spread: measures only"        = \() list(s = lpm2(rep(n / N, N), spread_cov), pi = rep(n / N, N)),
+  "Spread: measures + map"       = \() list(s = lpm2(rep(n / N, N), spread_geo), pi = rep(n / N, N))
+)
+
+# Each design is drawn N_REPS times; every draw is scored against both
+# stand-in populations.
+sims <- purrr::imap(designs, \(draw, name) {
+  purrr::map(seq_len(N_REPS), \(r) {
+    d <- draw()
+    purrr::imap(outcomes, \(o, pop_name) tibble::tibble(
+      design = name, population = pop_name, rep = r,
+      measure = names(truth_of(o)), estimate = estimate(o, d$s, d$pi),
+      truth = truth_of(o),
+      n_drawn = length(d$s),
+      small_drawn = sum(pop$type[d$s] == "Small village or hamlet"))) |>
+      purrr::list_rbind()
+  }) |> purrr::list_rbind()
+}) |> purrr::list_rbind()
+
+perf <- sims |>
+  dplyr::summarise(rmse = sqrt(mean((.data$estimate - .data$truth)^2)),
+                   bias = mean(.data$estimate - .data$truth),
+                   .by = c("population", "design", "measure")) |>
+  dplyr::mutate(rel_rmse = .data$rmse / .data$rmse[.data$design == "Simple random"],
+                .by = c("population", "measure"))
+
+# The design with the lowest average relative error across both populations
+# and all four measures.
+design_rank <- perf |>
+  dplyr::filter(.data$design != "Simple random") |>
+  dplyr::summarise(mean_rel = mean(.data$rel_rmse), worst_rel = max(.data$rel_rmse),
+                   .by = "design") |>
+  dplyr::arrange(.data$mean_rel)
+robust_design <- design_rank$design[[1]]
+
+# Stratum cells: type x ring size.
+cells <- pop |>
+  dplyr::count(.data$type, .data$ring_class) |>
+  dplyr::mutate(expected = .data$n / N * N_CHASED)
+n_cells_small <- sum(cells$expected < 10)
+```
+
+*Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
+and made the decisions; Claude drafted the code and text, which Mark
+reviewed.*
+
+## Background and brief
+
+**Where this fits.** The census will chase about `r fmt(N_CHASED)` randomly
+drawn towers until each replies. Comparing them with towers that reply
+unprompted shows who does not respond, and lets the estimates correct for
+it. The chapter *Choosing a classification* gives each tower a place type,
+built from place measures only. This chapter asks how to use the types,
+the measures and ring size when drawing the chased sample.
+
+**What Mark asked for.**
+
+- *Stratify by number of bells and by type of place*, or by something that
+  achieves the same.
+- *Align with good, defensible practice*, and explain it to delegates.
+- *Pay heed to 1988*, which drew a simple random sample of 500 towers.
+
+**What this chapter uses.** The working classification (Draft B), and the
+1988 survey's published rates to build stand-in populations. Both are
+provisional, so the comparison between designs matters more than any single
+number.
+
+**What it does not decide.** The design itself, which is open question Q-023.
+
+## Headline findings
+
+- **The best design was `r robust_design`.** Over `r N_REPS` simulated
+  draws of `r fmt(N_CHASED)` towers, scored against two stand-in
+  populations, it had `r pct(abs(1 - design_rank$mean_rel[[1]]))`
+  `r if (design_rank$mean_rel[[1]] < 1) "less" else "more"` error than
+  simple random sampling, on average across four estimates.
+- **The gains are modest, and the designs are close.** Average error,
+  relative to simple random sampling, runs from
+  `r round(min(design_rank$mean_rel), 2)` to
+  `r round(max(design_rank$mean_rel), 2)`. Practical differences
+  (explanation, variance estimation, cell sizes) should weigh as much as the
+  error figures.
+- **Stratifying by type and ring size makes small cells.** Of
+  `r nrow(cells)` cells, `r n_cells_small` expect fewer than 10 chased towers
+  under proportional allocation, and would need merging for stable
+  estimates.
+
+## Which sampling design? A simulation
+
+**The question.** For the chased sample of `r fmt(N_CHASED)` towers, which
+way of drawing gives the most accurate estimates? Five designs are compared:
+
+| Design | How it works |
+| --- | --- |
+| Simple random | Every set of towers equally likely. The baseline, and what 1988 did |
+| Stratified: type x ring size | Fixed numbers from each combination of place type and ring-size class, in proportion to its size, at least `r MIN_PER_CELL` each |
+| Sorted systematic | List the towers by type, ring size and density, then take every k-th from a random start |
+| Spread: measures only | Local pivotal method:^[Grafström, Lundström & Schelin (2012).] towers similar in density, isolation, coast and ring size compete, so the sample spreads evenly across those measures |
+| Spread: measures + map | The same, with map position added, so the sample also spreads across the country |
+
+All five give every tower the same chance of selection, apart from the small
+departures that the stratified design's minimum per cell creates.
+
+**The test population.** The true number of ringers at each tower is
+unknown until the census, so a stand-in is built from 1988's published
+rates. Each tower gets a band with a probability set by its 1988 settlement
+type and ring size (1988 Table 9.2), and a band size set by its ring size and
+1988's ringers per bell for its type (Table 9.3), plus random variation. The
+place types are mapped to 1988's five as in *Choosing a classification*. This
+is not a forecast. Its only job is to have the right *kind* of structure, so
+the designs can be compared fairly.
+
+Two versions are used, because the answer depends on the shape of the truth:
+
+- **Steps at type boundaries:** rates change only between types and
+  ring-size classes, exactly as 1988's tables are laid out. This favours
+  designs that use the types.
+- **Smooth in the measures:** the same overall pattern, but varying
+  smoothly with density, growth since the bells, isolation and ring size.
+  This favours designs that spread across the measures.
+
+A design that does well under both is the safe choice.
+
+```{r}
+#| label: fig-designs
+#| fig-height: 6
+#| fig-cap: "Error of each design relative to a simple random sample (1 = same error; lower is better), over repeated simulated draws. Rows: the two stand-in populations."
+labels <- c(total_ringers = "Total ringers", share_with_band = "Share of towers with a band",
+            ringers_per_bell = "Ringers per bell", village_ringers = "Ringers in villages and hamlets")
+perf |>
+  dplyr::mutate(measure = factor(labels[.data$measure], levels = labels),
+                design = factor(.data$design, levels = names(designs))) |>
+  ggplot(aes(rel_rmse, design)) +
+  geom_vline(xintercept = 1, colour = "grey60", linewidth = 0.3) +
+  geom_point(colour = PAL_CAT[1], size = 2.5) +
+  facet_grid(population ~ measure, labeller = label_wrap_gen(width = 16)) +
+  scale_x_continuous(limits = c(0, NA), breaks = c(0, 0.5, 1)) +
+  theme(strip.text.y = element_text(angle = 0, hjust = 0)) +
+  labs(x = "Error relative to simple random sampling (root mean square)", y = NULL)
+```
+
+```{r}
+#| label: tbl-designs
+perf |>
+  dplyr::mutate(measure = labels[.data$measure], rel_rmse = round(.data$rel_rmse, 2)) |>
+  dplyr::select("population", "design", "measure", "rel_rmse") |>
+  tidyr::pivot_wider(names_from = "measure", values_from = "rel_rmse") |>
+  knitr::kable(caption = "Relative error by design (simple random = 1)")
+
+design_rank |>
+  dplyr::mutate(dplyr::across(c("mean_rel", "worst_rel"), \(x) round(x, 2))) |>
+  dplyr::rename(`average relative error` = "mean_rel", `worst relative error` = "worst_rel") |>
+  knitr::kable(caption = "Designs ranked by average relative error across both populations and all four estimates")
+```
+
+**Fair shares.** A worry about any design without fixed quotas is that a
+type could end up under-represented by chance. The table shows how many
+small villages and hamlets each design draws:
+
+```{r}
+#| label: tbl-small-counts
+sims |>
+  dplyr::filter(.data$measure == "total_ringers",
+                .data$population == names(outcomes)[1]) |>
+  dplyr::summarise(
+    `drawn: average` = round(mean(.data$small_drawn)),
+    `drawn: range in 95% of draws` = paste(
+      round(stats::quantile(.data$small_drawn, 0.025)), "to",
+      round(stats::quantile(.data$small_drawn, 0.975))),
+    .by = "design"
+  ) |>
+  knitr::kable(caption = paste0("Small villages and hamlets in each draw of ", fmt(N_CHASED),
+                                " (fair share: ", round(N_CHASED * type_share[["Small village or hamlet"]]), ")"))
+```
+
+**Why the gains are modest.** The stand-ins inherit 1988's rates, and those
+barely differ outside the villages: towns, suburbs and large cities all had
+a band at 92% of towers. A design can only gain from differences that
+exist. If the census finds bigger contrasts, for example between small
+villages and larger ones, the gains from using the types will be bigger.
+
+**How precise the comparison is.** Each relative error comes from
+`r N_REPS` simulated draws, so it is uncertain by about
+±`r round(2 / sqrt(N_REPS), 2)` (95%). Designs closer than that cannot be
+told apart, and their order in the ranking may change from run to run.
+
+**The strongest case against trusting these numbers.** Both stand-in
+populations were built from the same types and measures the designs use.
+That flatters every design that uses them. Real gains will be smaller, and
+will depend on how strongly real band size and response follow these
+measures. What should hold is the comparison between designs, which is why
+two differently shaped populations are used.
+
+## Stratum cells
+
+If the draw is stratified by type and ring size, each cell needs enough
+chased towers for a stable estimate: about 10 is a common rule of thumb, and
+at least 2 are needed to estimate variance at all. The table shows the frame
+count in each cell, and in brackets the chased towers expected under
+proportional allocation.
+
+```{r}
+#| label: tbl-cells
+cells |>
+  dplyr::mutate(cell = paste0(.data$n, " (", round(.data$expected), ")")) |>
+  dplyr::select("type", "ring_class", "cell") |>
+  tidyr::pivot_wider(names_from = "ring_class", values_from = "cell", values_fill = "0",
+                     names_sort = TRUE) |>
+  dplyr::arrange(.data$type) |>
+  knitr::kable(caption = paste0("Frame towers by type and ring size (expected chased towers at n = ", fmt(N_CHASED), ")"))
+```
+
+The small cells are mostly the urban types with small rings, and the society
+towers. They can be merged with their neighbours (inner city with suburban,
+for example), or drawn with certainty.
+
+## Practical differences the simulation does not show
+
+| Design | Strengths | Weaknesses |
+| --- | --- | --- |
+| Stratified | Easiest to explain: "we drew X villages" | Many small cells once crossed with ring size; cells need at least 2 for variance estimation, so some must be merged |
+| Sorted systematic | Near-exact fair shares with no cells; close in spirit to 1988's alphabetical list | Variance estimation needs an approximation, usually pairing neighbouring draws |
+| Spread (local pivotal) | Uses the continuous measures directly; can spread across the map too | Least familiar to delegates; needs the `BalancedSampling` package and its variance estimator |
+
+1988's own sampling bears on this. It drew "500, picked at random from all
+of the towers listed in an updated computer version of Dove's guide,
+arranged alphabetically", and checked afterwards that ring sizes and regions
+were fairly represented. The settlement types were used for analysis, not
+for drawing the sample.
+
+## What this suggests
+
+Provisional, for the analytical team and the committee (Q-023):
+
+1. **Use a design that draws on the place types and the measures,** rather
+   than simple random sampling. On these results the strongest is
+   **`r robust_design`**. The practical table should weigh as much as the
+   error figures, because the differences between these designs are modest
+   next to the gain over simple random sampling.
+2. **Whatever the design, report results by place type crossed with ring
+   size.** The types contain no ring-size information, so the cross is
+   clean, and they map onto 1988's types.
+3. **Draw the society and city-core towers with certainty** or as their own
+   small stratum (Q-022). They are few, unusual and recognisable by name.
+4. **Re-run this simulation** once the classification's lines are settled,
+   since the types feed every design.
+
+## Methods and sources
+
+**Spread and balanced sampling.** Grafström, A., Lundström, N. L. P. &
+Schelin, L. (2012), "Spatially balanced sampling through the pivotal
+method", *Biometrics* 68(2), 514–520. Deville, J.-C. & Tillé, Y. (2004),
+"Efficient balanced sampling: the cube method", *Biometrika* 91(4),
+893–912. Grafström, A. & Schelin, L. (2014), "How to select representative
+samples", *Scandinavian Journal of Statistics* 41(2), 277–290, gives the
+variance estimator for spread samples. All three are implemented in the R
+package `BalancedSampling`.
+
+**1988.** *The Central Council Survey of Ringing* (1988 survey, published in
+*The Ringing World* 1989 and collected as a book). Chapter 2 (sampling),
+Chapter 4 (bands) and Chapter 9 (geography, Tables 9.1–9.3).

@@ -38,3 +38,28 @@ cannot be defended when a delegate queries it.
 - **Branch / district does not exist in Dove.** If drill-down by branch is
   required, that attribute must be sourced from associations directly. Do not
   collect it as free text from tower representatives.
+
+## known_towers.csv — towers people on the team know well
+
+A sense check for the settlement classification. Each row is a tower that a
+named person knows well enough to say what sort of place it feels like. The
+analysis chapter *Choosing a classification* lists every known tower with its
+class, the measures behind it, and whether the class matches the feel.
+
+| Column | Meaning |
+| --- | --- |
+| `tower_id`, `ring_id` | Dove keys. Join on `tower_id` |
+| `dove_label` | Dove's place and dedication, for reading the file |
+| `known_by` | Who knows it |
+| `relationship` | A few words on how they know it |
+| `feels_like` | What sort of place it feels like, in the classification's own words: `Small village or hamlet`, `Village`, `Town`, `City or large town`, `Suburban`, `Inner city`. Use the nearest; do not add new words |
+| `why` | Optional: a few words on why it feels that way |
+| `added_on` | Date the row was added |
+
+`feels_like` is the person's judgement, recorded **before** seeing the class
+the rules give. Change it only if your view of the place changes, never to
+match the rules: a disagreement is the useful part.
+
+To add your own: append rows, one per tower, keeping the relationship short
+and impersonal. **This repository is public.** Do not add anything about
+other people, or anything you would not want published.

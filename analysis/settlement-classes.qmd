@@ -1,0 +1,791 @@
+---
+title: "Choosing a classification"
+---
+
+```{r}
+#| label: setup
+#| include: false
+# here() would stop at analysis/, which has its own _quarto.yml. Declaring
+# this file's place in the repo fixes the root at the repository itself.
+here::i_am("analysis/settlement-classes.qmd")
+source(here::here("scripts", "00_setup.R"))
+source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft B
+```
+
+```{r}
+#| label: prepare
+#| include: false
+# ---- 1988: how many towers in each settlement type -------------------------
+# The 1988 report does not publish the counts. They are inferred from Table
+# 11.2 (shared bands), which gives two percentages per type: the type's share
+# of the 47 towers with shared bands, and the share of the type's own towers
+# with a shared band. Rounding leaves a range for each count. See the prose.
+counts_1988 <- tibble::tribble(
+  ~type_1988,   ~shared_pct_of_47, ~shared,  ~pct_within, ~n_min, ~n_max, ~n_best,
+  "Inner City",  9,                 4,        50,           8,      8,      8,
+  "Suburban",    9,                 4,         9,          43,     47,     45,
+  "Large City",  4,                 2,         9,          22,     23,     23,
+  "Town",       26,                12,        11,         105,    114,    110,
+  "Village",    53,                25,        12,         201,    217,    209
+)
+share_range <- function(i) {
+  lo <- counts_1988$n_min[i] / (counts_1988$n_min[i] + sum(counts_1988$n_max[-i]))
+  hi <- counts_1988$n_max[i] / (counts_1988$n_max[i] + sum(counts_1988$n_min[-i]))
+  c(lo, hi)
+}
+counts_1988 <- counts_1988 |>
+  dplyr::mutate(
+    share_best = .data$n_best / sum(.data$n_best),
+    share_lo   = purrr::map_dbl(dplyr::row_number(), \(i) share_range(i)[1]),
+    share_hi   = purrr::map_dbl(dplyr::row_number(), \(i) share_range(i)[2])
+  )
+TYPES_1988 <- counts_1988$type_1988
+
+# 1988 Tables 9.1-9.3, by settlement type.
+rates_1988 <- tibble::tribble(
+  ~type_1988,   ~rung_pct, ~band_pct, ~ringers_per_bell,
+  "Inner City",  63,        63,        1.22,
+  "Suburban",    80,        92,        1.45,
+  "Large City",  83,        92,        1.70,
+  "Town",        81,        92,        1.42,
+  "Village",     46,        70,        1.24
+)
+
+# Draft A's mapping to 1988, as used in the earlier draft.
+crosswalk_1988_a <- c(
+  "Village"                             = "Village",
+  "Village in a built-up region"        = "Village",
+  "Town"                                = "Town",
+  "Town in a built-up region"           = "Suburban",
+  "City or large town"                  = "Large City",
+  "City or large town in a conurbation" = "Inner City",
+  "Society or city-core tower"          = "Inner City"
+)
+
+# Share of comparable towers in each 1988 type, under each draft. Built
+# directly rather than with summarise(), which no longer accepts a result of
+# more than one row per group.
+share_1988_types <- function(types, crosswalk) {
+  as.numeric(prop.table(table(factor(unname(crosswalk[as.character(types)]),
+                                     levels = TYPES_1988))))
+}
+shares_vs_1988 <- tibble::tibble(
+  type_1988 = TYPES_1988,
+  draft_a   = share_1988_types(comparable_1988$type_a, crosswalk_1988_a),
+  draft_b   = share_1988_types(comparable_1988$type,   crosswalk_1988)
+) |>
+  dplyr::left_join(counts_1988 |> dplyr::select("type_1988", "share_best", "share_lo", "share_hi"),
+                   by = "type_1988")
+village_a <- shares_vs_1988$draft_a[shares_vs_1988$type_1988 == "Village"]
+village_b <- shares_vs_1988$draft_b[shares_vs_1988$type_1988 == "Village"]
+village_88 <- counts_1988$share_best[counts_1988$type_1988 == "Village"]
+
+# ---- independent checks on Draft B -----------------------------------------
+ring_check <- frame_towers |>
+  dplyr::summarise(towers = dplyr::n(), p8 = mean(.data$bells >= 8),
+                   `median growth since bells (u)` = round(stats::median(.data$u), 2),
+                   .by = "type") |>
+  dplyr::arrange(.data$type)
+p8_of <- \(t) ring_check$p8[ring_check$type == t]
+
+# ---- known towers -------------------------------------------------------------
+# "Society or city-core tower" is a list, not a kind of place, so it agrees
+# with anyone who feels the place is a city or an inner city.
+agrees <- function(feels, type) {
+  feels == as.character(type) |
+    (type == "Society or city-core tower" & feels %in% c("City or large town", "Inner city"))
+}
+known_b <- known |>
+  dplyr::select("tower_id", "known_by", "relationship", "feels_like", "why") |>
+  dplyr::inner_join(towers, by = "tower_id") |>
+  dplyr::mutate(agree = agrees(.data$feels_like, .data$type))
+n_known_missing <- nrow(known) - nrow(known_b)
+known_row <- \(id) dplyr::filter(known_b, .data$tower_id == id)
+welwyn    <- known_row("14639")
+amersham  <- known_row("14913")
+staines   <- known_row("11525")
+st_albans <- known_row("15782")
+
+# ---- reclassify with one threshold changed (for sensitivity tables) ---------
+reclass <- function(d, ...) {
+  th <- utils::modifyList(DRAFT_B, list(...))
+  classify_settlement_b(d$centre_pop, d[[INNER_VAR]], d$pop_r1km, d$society, th, TYPE_LEVELS)
+}
+# The town line at which Draft B's town share comes closest to 1988's.
+town_88 <- counts_1988$share_best[counts_1988$type_1988 == "Town"]
+town_b  <- shares_vs_1988$draft_b[shares_vs_1988$type_1988 == "Town"]
+line_grid <- seq(1000, 3000, by = 250)
+town_share_at <- purrr::map_dbl(line_grid, \(t)
+  mean(reclass(comparable_1988, town_pop_1km = t) == "Town"))
+line_88 <- line_grid[which.min(abs(town_share_at - town_88))]
+village_b_at_88 <- mean(reclass(comparable_1988, town_pop_1km = line_88) %in%
+                          c("Village", "Small village or hamlet"))
+```
+
+*Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
+and made the decisions; Claude drafted the code and text, which Mark
+reviewed.*
+
+## Background and brief
+
+**Where this fits.** The census will chase about 1,000 randomly drawn towers
+until each replies. The draw, and every later analysis, needs a way of saying
+what sort of place each tower is in. The chapter *Towers and the places they
+stand in* built and explored the measures. This chapter turns them into
+named place types. *Choosing a sampling method* then uses the types.
+
+**What Mark asked for.**
+
+- *One question, answered clearly:* "what sort of place are these bells
+  in?" Clarity of the concept, and of how it is communicated, comes first.
+- *Place only, never bells.* The types will be crossed with ring size in
+  strata and in every tower-level analysis, so they must not be built from
+  ring size. Ring size may check the types, but not define them. (The first
+  draft used ring size inside the rules. Mark rejected it as muddying the
+  concept.)
+- *Split the villages.* An earlier draft put most towers in one village
+  class. Mark: "I just don't feel like it's likely to distinguish between the
+  isolated and low-population villages likely to have empty churches and the
+  more typical ones."
+- *Follow the settlement's own shape.* St Albans and Staines both sit near
+  London, but feel completely different: there are "clear gaps between the
+  city (/large town) and the ones around it" at St Albans, while Staines
+  "felt like suburban spread".
+- *Pay fair heed to 1988* as a guide to how to carve up the towers, starting
+  with how many fell in each of its five types.
+- *Check against towers people know.* A curated list in
+  `data/reference/known_towers.csv` records, for each known tower, what sort
+  of place it feels like.
+- *Work outside England without rework*, and be meaningful to ringers.
+
+**What this chapter does not decide.** The final types, their thresholds,
+and the handling of the special-case towers. All are open questions in the
+decision register (Q-022, Q-023).
+
+## Headline findings
+
+- **1988's types, by inference, held about
+  `r pct(village_88)` villages, `r pct(counts_1988$share_best[4])` towns,
+  `r pct(counts_1988$share_best[2])` suburban, `r pct(counts_1988$share_best[3])`
+  large-city and `r pct(counts_1988$share_best[1])` inner-city towers.** The
+  report does not publish the counts. They can be worked out, within narrow
+  ranges, from its table of shared bands.
+- **The first place-only draft (Draft A) had too many villages.** It put
+  `r pct(village_a)` of comparable towers in villages, against 1988's
+  `r pct(village_88)`, and could not tell St Albans from Staines.
+- **The working draft (Draft B) starts from the settlement the tower stands
+  in.** A tower inside a continuous built-up area of 50,000 or more is in a
+  city, a suburb or an inner city, depending on the area's size and the
+  local density. Elsewhere, the number of people within 1 km makes it a town,
+  a village, or a small village or hamlet.
+- **Draft B's shares are close to 1988's.** Mapped onto 1988's five types,
+  it puts `r pct(village_b)` of comparable towers in villages and
+  `r pct(town_b)` in towns, against 1988's `r pct(village_88)` and
+  `r pct(town_88)`. `r if (line_88 == DRAFT_B$town_pop_1km) paste0("The town line of ", fmt(DRAFT_B$town_pop_1km), " people within 1 km is the one that best matches 1988's share of towns.") else paste0("A town line of ", fmt(line_88), " people within 1 km, instead of ", fmt(DRAFT_B$town_pop_1km), ", would match 1988's share of towns more closely.")`
+- **It splits the villages.** `r pct(type_share[["Small village or hamlet"]])`
+  of frame towers are in a small village or hamlet, with fewer than
+  `r fmt(DRAFT_B$village_pop_1km)` people within 1 km. Only
+  `r pct(p8_of("Small village or hamlet"))` of them have 8 or more bells,
+  against `r pct(p8_of("Village"))` in larger villages.
+- **It matches `r sum(known_b$agree)` of `r nrow(known_b)` known towers.**
+  St Albans and Staines now fall apart as Mark described.
+  `r if (nrow(welwyn) == 1 && !welwyn$agree) "Welwyn is the miss: it reads as a town, though it feels like a village. On the measures it is Amersham's twin, which Mark accepts." else ""`
+
+## How 1988 classified places
+
+**The types.** The 1988 survey analysed its towers by five settlement types:
+"Inner City of major conurbations, Suburban, Large City, Town,
+Village".^[Central Council Survey of Ringing (1988), Chapter 9.] The
+published account names the types but does not say how towers were assigned
+to them. The analysis was done by Ron Johnston at the University of
+Sheffield, a human geographer and a ringer who later became President of the
+Central Council.^[Wikipedia, "Ron Johnston (geographer)".] The five types
+follow the urban geography of the time, in particular its distinction
+between the deprived inner city and the city centre.
+
+**How many towers were in each type.** The report never gives the counts,
+but Table 11.2 allows them to be worked out. It gives two figures for each
+settlement type. In its words, "the first figure indicates the percentage of
+towers with shared bands that are in the relevant category; the second
+figure (in brackets) indicates the percentage within that specific category
+that have shared bands". There were 47 towers with shared bands: "This gives
+a total of 47 towers out of the sampled 500". So:
+
+1. The first figure, applied to the 47, gives the number of shared bands in
+   each type. Only one whole number fits each percentage.
+2. Dividing by the second figure gives the number of towers in the type.
+   Rounding leaves a range.
+3. Where Table 9.1's percentages fit only one count within the range, that
+   count is taken as the best estimate.
+
+The text confirms the smallest: "half of the small number of inner city
+towers were reported as having shared bands", which is 4 of 8.
+
+```{r}
+#| label: tbl-1988-counts
+counts_1988 |>
+  dplyr::transmute(
+    `1988 type` = .data$type_1988,
+    `% of the 47 shared bands` = .data$shared_pct_of_47,
+    `shared bands` = .data$shared,
+    `% of type with a shared band` = .data$pct_within,
+    `towers in type` = ifelse(.data$n_min == .data$n_max, as.character(.data$n_min),
+                              paste0(.data$n_min, "–", .data$n_max)),
+    `best estimate` = .data$n_best,
+    share = ifelse(pct(.data$share_lo) == pct(.data$share_hi), pct(.data$share_best), paste0(pct(.data$share_best), " (", pct(.data$share_lo), "–", pct(.data$share_hi), ")"))
+  ) |>
+  knitr::kable(caption = "1988's towers by settlement type, inferred from Table 11.2 (share: best estimate, with the range rounding allows)")
+```
+
+**How far to trust these.** Four cautions apply.
+
+- *They total about `r fmt(sum(counts_1988$n_best))` towers, not 500.* The
+  survey had returns for 471 towers. The rest were apparently not
+  classified, or not counted in this table. If they were mostly of one type,
+  the shares would shift.
+- *1988 was itself a sample.* With about 400 towers, a share near half is
+  uncertain by about 5 percentage points either way (95% interval).
+- *The frame was rings of five or more.* 1988 drew "500, picked at random
+  from all of the towers listed in an updated computer version of Dove's
+  guide", from "some 5425 towers with five or more bells". Comparisons below
+  therefore use British Isles frame towers with five or more bells.
+- *The assignment rule is unknown.* Similar shares are encouraging, but they
+  do not show that a tower would have been placed in the same type.
+
+1988's rates by type, for reference:
+
+```{r}
+#| label: tbl-1988-rates
+rates_1988 |>
+  dplyr::rename(`1988 type` = "type_1988",
+                `% rung on survey Sunday` = "rung_pct",
+                `% with a band` = "band_pct",
+                `ringers per bell (towers with a band)` = "ringers_per_bell") |>
+  knitr::kable(caption = "1988's published rates by settlement type (Tables 9.1–9.3)")
+```
+
+In the survey's words, "the inner city and village church bells [are] much
+more likely to be silent", and "the village and inner-city bands tend to be
+the smallest".
+
+## The ready-made classifications
+
+Two official classifications are carried alongside the measures as
+yardsticks. Both classify *areas*, not towers, and each was built to answer a
+different question from ours. Knowing how they are made explains where they
+fit ringing and where they do not.
+
+| | Degree of Urbanisation (international) | ONS Rural Urban Classification 2021 | Scottish Government Urban Rural Classification |
+| --- | --- | --- | --- |
+| Covers | Every country | England and Wales | Scotland |
+| Built from | 1 km population grid cells | Output Areas, about 125 households each | Settlements |
+| Main idea | Size and density of contiguous built-up clusters | Address density and the population of the built-up area | Settlement population, plus drive time to a town of 10,000 |
+| Classes | 3 at level 1, 7 at level 2 | 3 settlement classes x 2 access classes | 6 or 8 |
+| Used here | Yes, for every tower | Yes, England and Wales only | No |
+
+### The international Degree of Urbanisation
+
+**Purpose.** One definition of city, town and rural area that works the same
+in every country, so countries can be compared. The UN Statistical
+Commission endorsed it in March 2020. Six bodies developed it: the European
+Commission, the UN Food and Agriculture Organization, UN-Habitat, the
+International Labour Organization, the OECD and the World Bank. It is meant
+to sit beside national definitions, not replace them: in the manual's words,
+it "is intended to complement and not replace the definitions used by
+national statistical offices".
+
+**Construction.** It starts from a grid of 1 km cells with a population
+count in each, ignoring administrative boundaries.
+
+- **Urban centre:** a contiguous patch of cells with at least 1,500 people
+  per km² and at least 50,000 people in total, joined edge to edge.
+- **Urban cluster:** a contiguous patch with at least 300 people per km² and
+  at least 5,000 in total, joined edge to edge or corner to corner.
+- **Rural:** everything else.
+
+Level 2 splits these further, into seven classes: urban centre; dense and
+semi-dense urban clusters; suburban or peri-urban cells; and three rural
+classes by density. Access to services is left out on purpose, so that
+access can be studied separately.
+
+**What it means for ringing.** It is the only scheme that works unchanged
+for the Australian and US towers. Taken cell by cell, each tower simply
+takes the class of the 1 km cell it falls in, so a tower near a cell edge
+can take a class that does not match its own street. Its urban centres,
+traced as whole patches, are more robust, and Draft B uses them. This
+project uses its GHSL implementation (the EU's Global Human Settlement
+Layer, 2020 epoch).
+
+### The ONS Rural Urban Classification 2021
+
+**Purpose.** The official urban–rural split for statistics and policy in
+England and Wales. The basic unit is the Output Area.
+
+**Construction.** In ONS's words, Output Areas are "defined as 'Urban' if
+they have a high density of residential addresses, or if they intersect with
+Amalgamated Built Up Areas (ABUAs) with a resident population of 10,000 or
+more". An Amalgamated Built Up Area joins built-up areas "within 200m of one
+another and with a direct road connection, representing larger
+conurbations". Everything else is rural, split into Larger and Smaller rural.
+Each class is then split by "relative access": nearer to or further from a
+major town or city of more than 75,000 people, by travel time.
+
+**What it means for ringing.** Because built-up areas within 200 m are
+joined, a whole conurbation becomes one urban area. With three settlement
+classes it is also coarse. The 2021 and 2011 versions are not directly
+comparable, because the method changed.
+
+**Its predecessor is closer to this project's approach.** The 2011
+classification had ten classes, including "Major Conurbation", "Minor
+Conurbation", "Town and Fringe", "Village" and "Hamlets and Isolated
+Dwellings". It recognised settlement *form*. Each dwelling was placed in a
+100 m cell, and density was measured at several increasing distances around
+it to build a "density profile". That is the same idea as this project's
+kernels.
+
+### Scotland and Northern Ireland
+
+Scotland has its own classification. It is based on settlement population
+(Large Urban Areas of 125,000 or more, Other Urban Areas of 10,000 to
+124,999, Small Towns of 3,000 to 9,999, and Rural Areas below 3,000) and on
+drive time to a settlement of 10,000 or more. Northern Ireland has a separate
+settlement classification from NISRA. Neither is loaded here: Dove lists only
+24 Scottish rings, and treats the island of Ireland as a single country.
+
+### Why none is enough on its own
+
+Each answers "how urban is this area?" for its own territory. Ringing needs
+one answer that works for every tower, follows the settlement rather than an
+administrative area, and separates a free-standing city from a suburb. Draft
+B borrows from all three: the Degree of Urbanisation's urban centres and
+village size, and the Scottish scheme's idea of a small town.
+
+```{r}
+#| label: tbl-smod-ruc
+frame_towers |>
+  dplyr::filter(!is.na(.data$ruc21nm)) |>
+  dplyr::count(.data$ruc21nm, .data$smod_class) |>
+  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "England & Wales frame towers: ONS RUC 2021 against Degree of Urbanisation")
+```
+
+## Draft A, and why it was set aside
+
+**What it did.** Draft A measured each tower's own settlement with a 1 km
+circle (village, town, or city and large town, on the Degree of
+Urbanisation's density and population lines), and crossed that with whether
+the region within the 8 km kernel was built-up.
+
+**Why it was set aside.** Three problems, found by Mark against towers he
+knows and by comparison with 1988:
+
+- *Too many villages, all alike.* It put `r pct(village_a)` of comparable
+  towers in one village class, against 1988's `r pct(village_88)`. It had no
+  way to pick out the small, isolated villages most likely to have empty
+  churches.
+- *It could not see gaps between settlements.* A "built-up region" line on
+  the 8 km kernel counts everyone nearby, whether or not they live in the
+  same place. St Albans and Staines both came out as "city or large town in a
+  conurbation".
+- *A wide-area line is arbitrary.* Small moves in it moved hundreds of
+  towers between classes.
+
+## Draft B: start from the settlement the tower stands in
+
+**The rules.** In order, the first that applies:
+
+| Type | Rule |
+| --- | --- |
+| Society or city-core tower | On the draft special-case list as a society, City of London or central London tower |
+| Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land in the `r measure_label(INNER_VAR)` |
+| Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density |
+| City or large town | In an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
+| Town | Not in an urban centre, with at least `r fmt(DRAFT_B$town_pop_1km)` people within 1 km |
+| Village | `r fmt(DRAFT_B$village_pop_1km)` to `r fmt(DRAFT_B$town_pop_1km - 1)` people within 1 km |
+| Small village or hamlet | Fewer than `r fmt(DRAFT_B$village_pop_1km)` people within 1 km |
+
+An **urban centre** is a continuous built-up area, traced on the Degree of
+Urbanisation's 1 km grid with its own rules: cells of at least 1,500 people
+per km², joined edge to edge, totalling at least 50,000 people.
+
+**Where each line comes from.** All are provisional, and the sensitivity
+tables below show what moving them does.
+
+- *Urban centre, 50,000 people:* the international definition, unchanged.
+  Following the continuous built-up area is what separates St Albans, a city
+  with its own centre, from Staines, which is part of London's.
+- *Conurbation, `r fmt(DRAFT_B$conurbation_pop)` people:* set in a gap in
+  the sizes of urban centres, so that a small change in the data cannot move
+  a city across it (the table below lists the centres either side). It takes
+  in London and the large metropolitan areas, which 1988 called the "major
+  conurbations", and Bristol. Bristol matters: Richard Heys's register shows
+  several of its central ten-bell towers with no registered ringers, because
+  they are rung as a cluster, as in a conurbation's centre.
+- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km²:* set so that
+  inner-city towers, with the special list, are about as common as in 1988,
+  about 2%. Density is a rough stand-in for what 1988 meant by inner city,
+  which was as much about deprivation as density.
+- *Town, `r fmt(DRAFT_B$town_pop_1km)` people within 1 km:* the line that
+  best matches 1988's share of towns (Mark, 11 October). It is below the
+  Scottish "small town" line of 3,000 residents, so some places ringers
+  might call large villages count as towns. In a compact settlement most
+  people live within 1 km of the church, so this points to a place of a
+  couple of thousand or more.
+- *Village, `r fmt(DRAFT_B$village_pop_1km)` people within 1 km:* the
+  smallest population the Degree of Urbanisation counts as a rural cluster,
+  its nearest thing to a village. Below it are hamlets, and villages small
+  enough to struggle for a band.
+
+**Why 1 km for the town and village lines.** Ring size correlates best with
+density at about this scale (the previous chapter). It is the scale of a
+settlement's core: the church and the streets around it.
+
+### How the shares compare with 1988
+
+```{r}
+#| label: tbl-shares-1988
+shares_vs_1988 |>
+  dplyr::transmute(
+    `1988 type` = .data$type_1988,
+    `1988 (inferred)` = ifelse(pct(.data$share_lo) == pct(.data$share_hi), pct(.data$share_best), paste0(pct(.data$share_best), " (", pct(.data$share_lo), "–", pct(.data$share_hi), ")")),
+    `Draft A` = pct(.data$draft_a),
+    `Draft B` = pct(.data$draft_b)
+  ) |>
+  knitr::kable(caption = paste0("Shares of towers by 1988 type: 1988 inferred, against both drafts on comparable towers (British Isles frame, five or more bells, n = ", fmt(nrow(comparable_1988)), ")"))
+```
+
+Draft B maps onto 1988's types as follows: both village types to Village;
+Town to Town; City or large town to Large City; Suburban to Suburban; Inner
+city and the special list to Inner City.
+
+**Where Draft B still differs from 1988.** Two gaps remain.
+
+- *Towns and villages.* `r if (line_88 == DRAFT_B$town_pop_1km) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " people within 1 km would match 1988's share.")`
+- *Fewer suburbs, more cities.* 1988's "Suburban" probably included the
+  suburbs of large towns and smaller cities, which Draft B counts as part of
+  the city. Draft B keeps "Suburban" for conurbations, where the loss of a
+  place's own identity is greatest.
+
+```{r}
+#| label: tbl-types
+frame_towers |>
+  dplyr::summarise(
+    towers   = dplyr::n(),
+    share    = scales::label_percent(accuracy = 0.1)(dplyr::n() / nrow(frame_towers)),
+    `median people within 1 km` = fmt(stats::median(.data$pop_r1km)),
+    `median people per km² (2 km kernel)` = fmt(stats::median(.data[[DENSITY_VAR]])),
+    `median bells` = stats::median(.data$bells),
+    .by = "type"
+  ) |>
+  dplyr::arrange(.data$type) |>
+  knitr::kable(caption = "Draft B types, all frame towers")
+```
+
+### Independent checks
+
+Ring size and "growth since the bells" play no part in the rules. If the
+types mean something, both should still change steadily from type to type.
+
+```{r}
+#| label: tbl-ring-check
+ring_check |>
+  dplyr::mutate(`rings of 8 or more` = pct(.data$p8)) |>
+  dplyr::select(-"p8") |>
+  knitr::kable(caption = "Ring size and growth since the bells, by Draft B type (neither is used to classify)")
+```
+
+**What the checks show.** Rings of 8 or more rise from
+`r pct(p8_of("Small village or hamlet"))` in small villages and hamlets, to
+`r pct(p8_of("Village"))` in villages and `r pct(p8_of("Town"))` in towns.
+The village split is therefore real in the one outcome available before the
+census: small villages are much less likely to have a large ring. Whether
+they are also more likely to have no band, as Mark expects, is for the
+census to show. 1988 found that only 70% of village towers had a band,
+against 92% of towns, so the gap may well sit mostly in the smallest places.
+
+### Sense check: towers people know
+
+The types should feel right for towers people know well. Each person records
+what sort of place a tower feels like, in the types' own words, and the table
+compares that with the rules.
+
+```{r}
+#| label: tbl-known
+known_b |>
+  dplyr::transmute(
+    tower = .data$display,
+    `feels like` = .data$feels_like,
+    `Draft B` = as.character(.data$type),
+    match = ifelse(.data$agree, "yes", "**no**"),
+    `Draft A` = as.character(.data$type_a),
+    `people within 500 m` = fmt(.data$pop_r500m),
+    `people within 1 km` = fmt(.data$pop_r1km),
+    `urban centre (people)` = ifelse(is.na(.data$centre_pop), "none", fmt(.data$centre_pop)),
+    `nearest urban centre (km)` = round(.data$centre_dist_km, 1),
+    `international class` = as.character(.data$smod_class)
+  ) |>
+  knitr::kable(caption = "Known towers: how they feel, and how the drafts class them")
+```
+
+`r if (n_known_missing > 0) paste0("**", n_known_missing, " known towers were not found** among the ringable towers; check their tower IDs.") else ""`
+
+**What the known towers show.**
+
+- **St Albans and Staines now fall apart, as they feel.** St Albans has its
+  own urban centre of `r fmt(st_albans$centre_pop)` people, separated from
+  London by green belt. Staines is inside London's urban centre of
+  `r fmt(staines$centre_pop)`. This is the distinction Draft A could not draw.
+- **Oxford and York are cities, and the City of London towers are on the
+  special list.** Both as they feel.
+- **Amersham is a town, as it feels.** It has
+  `r fmt(amersham$pop_r1km)` people within 1 km. Its newer half,
+  Amersham-on-the-Hill, where most of the ringers live, lies up the hill
+  from the church.
+- **Welwyn reads as a town, though it feels like a village.** It has
+  `r fmt(welwyn$pop_r1km)` people within 1 km, more than Amersham's
+  `r fmt(amersham$pop_r1km)`, and sits `r round(welwyn$centre_dist_km, 1)` km
+  from the nearest urban centre, much as Amersham does
+  (`r round(amersham$centre_dist_km, 1)` km). In Mark's words, "Welwyn is to
+  WGC as Old Amersham is to Amersham": an older place beside a larger, newer
+  one. "Old Amersham feels bigger than Welwyn, but they're very comparable in
+  truth."
+
+**The honest conclusion on Welwyn and Amersham.** What separates them is
+identity: Amersham-on-the-Hill is part of a place called Amersham, while
+Welwyn Garden City is a different place. The grid cannot see names. Three
+options:
+
+1. *Accept it* as a known disagreement. Chosen (Mark, 11 October): a
+   classification that matches every known tower would be fitted to the
+   list, not to places.
+2. *Raise the town line* to about 4,000. Both would become villages, which
+   is wrong for Amersham.
+3. *Use named built-up areas* (ONS 2022 Built-up Areas) for England and
+   Wales. That would honour names, but break the rule that the method works
+   the same everywhere.
+
+More known towers, especially outside the South East, would show whether
+cases like these are rare or common.
+
+### Urban centres near the conurbation line
+
+The conurbation line sits in a gap between urban-centre sizes. The table
+lists the centres either side, with the places that have most frame towers
+in each, so that a re-run which moves a city across the line is visible.
+
+```{r}
+#| label: tbl-centres
+centre_names <- towers |>
+  dplyr::filter(!is.na(.data$centre_pop), .data$in_frame) |>
+  dplyr::mutate(place = sub(",.*$", "", .data$display),
+                place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place)) |>
+  dplyr::summarise(towers_include = paste(utils::head(names(sort(table(.data$place), decreasing = TRUE)), 3),
+                                         collapse = ", "),
+                   `frame towers` = dplyr::n(), .by = "centre_pop")
+centre_names |>
+  dplyr::filter(.data$centre_pop >= DRAFT_B$conurbation_pop / 2,
+                .data$centre_pop <= DRAFT_B$conurbation_pop * 2) |>
+  dplyr::arrange(dplyr::desc(.data$centre_pop)) |>
+  dplyr::mutate(side = ifelse(.data$centre_pop >= DRAFT_B$conurbation_pop,
+                              "conurbation", "city or large town"),
+                people = fmt(.data$centre_pop), .before = "towers_include") |>
+  dplyr::select(`frame towers include` = "towers_include", "people", "frame towers", "side") |>
+  knitr::kable(caption = paste0("Urban centres between half and twice the conurbation line of ",
+                                fmt(DRAFT_B$conurbation_pop), " people"))
+```
+
+### A candidate refinement: historic city cores
+
+Richard Heys's point about Bristol is wider than Bristol. Where many towers
+stand close together in an old city centre, bands are shared, and a tower can
+have no ringers of its own. That is a property of the place, and it can be
+measured without bells: the number of frame towers within 1 km.
+
+```{r}
+#| label: tbl-city-cores
+cores <- frame_towers |>
+  dplyr::filter(!is.na(.data$centre_pop), .data$towers_r1km >= 5) |>
+  dplyr::mutate(place = sub(",.*$", "", .data$display),
+                place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place))
+cores |>
+  dplyr::summarise(towers = dplyr::n(),
+                   `on the special list` = sum(.data$society),
+                   `Draft B types` = paste(unique(as.character(.data$type)), collapse = ", "),
+                   .by = "place") |>
+  dplyr::arrange(dplyr::desc(.data$towers)) |>
+  knitr::kable(caption = "Frame towers in an urban centre with five or more frame towers within 1 km")
+```
+
+**What it shows.** `r nrow(cores)` towers meet the test, in a handful of
+historic cities. They include `r sum(cores$society)` of the
+`r sum(frame_towers$society)` towers on the special list, found without the
+list. They also show a weakness of Draft B: a city's core can be split
+between types. `r bristol_core <- dplyr::filter(cores, .data$place == "Bristol"); if (nrow(bristol_core) > 0) paste0("Bristol's ", nrow(bristol_core), " core towers fall into ", dplyr::n_distinct(bristol_core$type), " types, because the inner-city density line runs through the middle of them.") else ""`
+
+**Not yet adopted.** A "historic city core" type, defined this way, could
+replace most of the special list with a measure that works anywhere. It is
+offered for Mark and the analysis volunteers to judge, ideally against
+register data on which towers have their own band.
+
+### How sensitive the types are to each line
+
+```{r}
+#| label: tbl-sens-town
+purrr::map(c(1500, 2000, 2500, 3000), \(t)
+  frame_towers |> dplyr::mutate(type = reclass(frame_towers, town_pop_1km = t)) |>
+    dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
+  purrr::list_rbind() |>
+  tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
+  knitr::kable(caption = "Frame towers per type at different town lines (people within 1 km)")
+```
+
+```{r}
+#| label: tbl-sens-village
+purrr::map(c(300, 500, 750, 1000), \(t)
+  frame_towers |> dplyr::mutate(type = reclass(frame_towers, village_pop_1km = t)) |>
+    dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
+  purrr::list_rbind() |>
+  tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
+  knitr::kable(caption = "Frame towers per type at different village lines (people within 1 km)")
+```
+
+```{r}
+#| label: tbl-sens-urban
+dplyr::bind_rows(
+  purrr::map(sort(unique(c(250000, 500000, DRAFT_B$conurbation_pop, 1000000))), \(t)
+    frame_towers |> dplyr::mutate(type = reclass(frame_towers, conurbation_pop = t)) |>
+      dplyr::count(.data$type) |> dplyr::mutate(line = paste("conurbation", fmt(t)))) |>
+    purrr::list_rbind(),
+  purrr::map(c(5000, 7000, 10000), \(t)
+    frame_towers |> dplyr::mutate(type = reclass(frame_towers, inner_density = t)) |>
+      dplyr::count(.data$type) |> dplyr::mutate(line = paste("inner", fmt(t)))) |>
+    purrr::list_rbind()
+) |>
+  tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
+  knitr::kable(caption = "Frame towers per type at different conurbation sizes (people) and inner-city densities (people per km² of land)")
+```
+
+**What moves and what does not.** The village and town lines trade towers
+between neighbouring rural types, as expected. The urban types depend only
+on the conurbation and inner-city lines. The total in urban centres depends
+on neither, because the urban centres themselves are fixed by the
+international definition.
+
+### Examples and maps
+
+Five towers drawn at random from each type, to test whether the names fit:
+
+```{r}
+#| label: tbl-type-examples
+frame_towers |>
+  dplyr::filter(.data$british_isles) |>
+  dplyr::slice_sample(n = 5, by = "type") |>
+  dplyr::arrange(.data$type) |>
+  dplyr::summarise(examples = paste(.data$display, collapse = "; "), .by = "type") |>
+  knitr::kable()
+```
+
+```{r}
+#| label: fig-type-map
+#| fig-height: 9
+#| fig-cap: "Draft B types, Great Britain."
+gb <- dplyr::filter(frame_towers, .data$country %in% c("England", "Wales", "Scotland"))
+ggplot(gb, aes(lon, lat, colour = type)) +
+  geom_point(size = 0.5, alpha = 0.8) +
+  scale_colour_manual(values = PAL_TYPE, name = NULL, drop = FALSE) +
+  coord_quickmap() +
+  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 2)) +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), panel.grid = element_blank())
+```
+
+```{r}
+#| label: fig-type-zoom
+#| fig-height: 5
+#| fig-cap: "Draft B types around London, the West Midlands and Manchester."
+zooms <- tibble::tribble(
+  ~area,            ~lon_min, ~lon_max, ~lat_min, ~lat_max,
+  "London",           -0.55,     0.35,    51.25,    51.85,
+  "West Midlands",    -2.35,    -1.55,    52.30,    52.70,
+  "Manchester",       -2.55,    -1.95,    53.30,    53.65
+)
+zoomed <- purrr::pmap(zooms, \(area, lon_min, lon_max, lat_min, lat_max)
+  frame_towers |>
+    dplyr::filter(dplyr::between(.data$lon, lon_min, lon_max),
+                  dplyr::between(.data$lat, lat_min, lat_max)) |>
+    dplyr::mutate(area = area)) |>
+  purrr::list_rbind()
+ggplot(zoomed, aes(lon, lat, colour = type)) +
+  geom_point(size = 1.4, alpha = 0.9) +
+  scale_colour_manual(values = PAL_TYPE, name = NULL, drop = FALSE) +
+  facet_wrap(~area, scales = "free") +
+  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 2)) +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), panel.grid = element_blank())
+```
+
+How Draft B lines up with Draft A and the ready-made classifications:
+
+```{r}
+#| label: tbl-b-vs-a
+frame_towers |>
+  dplyr::count(.data$type, .data$type_a) |>
+  tidyr::pivot_wider(names_from = "type_a", values_from = "n", values_fill = 0) |>
+  knitr::kable(caption = "Draft B (rows) against Draft A (columns), frame towers")
+```
+
+```{r}
+#| label: tbl-b-vs-smod
+frame_towers |>
+  dplyr::count(.data$type, .data$smod_class) |>
+  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Draft B against the international Degree of Urbanisation (the tower's own cell)")
+```
+
+```{r}
+#| label: tbl-b-vs-ruc
+frame_towers |>
+  dplyr::filter(!is.na(.data$ruc21nm)) |>
+  dplyr::count(.data$type, .data$ruc21nm) |>
+  tidyr::pivot_wider(names_from = "ruc21nm", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Draft B against the ONS Rural Urban Classification 2021, England and Wales")
+```
+
+## What this suggests
+
+Provisional, for Mark and the analytical team (Q-023):
+
+1. **Adopt Draft B as the working classification.** It answers "what sort of
+   place are these bells in?" from place measures alone, separates
+   settlements by their own edges, splits the villages, and lands close to
+   1988's shares.
+2. **Report it crossed with ring size.** It contains no ring-size
+   information, so the cross is clean, and 1988's inner-city against
+   large-city contrast can be recovered from it.
+3. **Keep the society and city-core towers as a list** (Q-022).
+4. **Grow the known-towers list** before fixing the lines, especially with
+   towers outside the South East, and record each person's sense of the
+   place before they see the rules' answer.
+5. **Revisit the town and village lines after fieldwork.** Once band sizes
+   are known for the chased towers, a model-based tree can check whether
+   the lines sit where outcomes actually change.
+
+## Methods and sources
+
+**1988.** *The Central Council Survey of Ringing* (1988 survey, published in
+*The Ringing World* 1989 and collected as a book). Chapter 2 (sampling),
+Chapter 9 (geography, Tables 9.1–9.3), Chapter 11 (shared bands, Table
+11.2). Ron Johnston: https://en.wikipedia.org/wiki/Ron_Johnston_(geographer).
+
+**Degree of Urbanisation.** Eurostat (2021), *Applying the Degree of
+Urbanisation: a methodological manual to define cities, towns and rural areas
+for international comparisons*. UN Statistical Commission endorsement, March
+2020. GHS-SMOD R2023A and GHS-POP R2023A: Schiavina, M. et al. (2023),
+European Commission Joint Research Centre.
+
+**ONS Rural Urban Classification.** ONS, *The 2021 Rural Urban
+Classification* (methodology and user guide). Defra/ONS, *The 2011
+Rural-Urban Classification for Output Areas in England: user guide* (2013).
+
+**Scotland.** Scottish Government, *Urban Rural Classification 2022:
+methodology*.

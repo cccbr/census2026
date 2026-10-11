@@ -16,6 +16,8 @@ book:
   chapters:
     - index.qmd
     - tower-context.qmd
+    - settlement-classes.qmd
+    - sampling-design.qmd
 
 format:
   html:

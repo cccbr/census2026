@@ -1,5 +1,5 @@
 ---
-title: "Tower settlement context: exploring the measures"
+title: "Towers and the places they stand in"
 ---
 
 ```{r}
@@ -9,17 +9,10 @@ title: "Tower settlement context: exploring the measures"
 # this file's place in the repo fixes the root at the repository itself.
 here::i_am("analysis/tower-context.qmd")
 source(here::here("scripts", "00_setup.R"))
+source(here::here("analysis", "_common.R"))   # data, provisional choices, model
 library(cluster)   # silhouette widths; ships with R
 
-FRAME_SNAPSHOT <- "dove_2026-09-19"   # <- named, never discovered
-
 # ---- choices this chapter makes, all provisional ---------------------------
-#
-# None of these is a decision. They are starting points for the analytical
-# team to calibrate, and they are set here so they are easy to find and vary.
-
-# Bells at the two towers with two frame rings (Gresford, Rugby): Q-020, open.
-MULTI_RING_BELLS <- "max"
 
 # Measures the clustering sees. Logged population at four kernel scales, plus
 # tower density at the local and wide scales. Bells are left out because they
@@ -32,86 +25,19 @@ N_PCS      <- 3
 K_CLUSTERS <- 6
 K_RANGE    <- 3:10
 
-# Rule-based alternative: bands of local (2 km kernel) and wider (8 km kernel)
-# population. NULL means "use tertiles". Replace with round numbers once the
-# distributions below have been looked at.
-LOCAL_BREAKS <- NULL
-WIDE_BREAKS  <- NULL
-
-# Bell classes for the stratification cross-tab.
+# Bell classes for tables.
 BELL_BREAKS <- c(4, 6, 8, 10, Inf)          # 4-5, 6-7, 8-9, 10+
 BELL_LABELS <- c("4-5", "6-7", "8-9", "10+")
 
-# Sample size for the expected-allocation table (chased towers, Lucky Dip).
-N_CHASED <- 1000
-
-set.seed(20261116)   # reference week; any fixed seed would do
-
-# ---- palette ----------------------------------------------------------------
-# Categorical: fixed slot order, never cycled (validated reference palette).
-PAL_CAT <- c("#2a78d6", "#eb6834", "#1baf7a", "#eda100",
-             "#e87ba4", "#008300", "#6250d6", "#e34948")
-# Ordinal blue ramp for the Degree of Urbanisation, light (rural) to dark.
-# Lightest step is 250, so the most rural class still clears 2:1 on white.
-PAL_SMOD <- c("Very low density rural"   = "#86b6ef",
-              "Low density rural"        = "#5598e7",
-              "Rural cluster"            = "#2a78d6",
-              "Suburban or peri-urban"   = "#256abf",
-              "Semi-dense urban cluster" = "#1c5cab",
-              "Dense urban cluster"      = "#184f95",
-              "Urban centre"             = "#0d366b",
-              "Water"                    = "#9a9a9a")
-
-theme_set(
-  theme_minimal(base_size = 11) +
-    theme(panel.grid.minor = element_blank(),
-          panel.grid.major = element_line(linewidth = 0.25, colour = "grey88"),
-          legend.position = "bottom",
-          plot.title.position = "plot")
-)
-
-lg  <- function(x) log10(x + 1)     # zeros exist (Lundy); +1 person is harmless
-fmt <- scales::label_comma(accuracy = 1)
+lg <- function(x) log10(x + 1)     # zeros exist (Lundy); +1 person is harmless
 ```
 
 ```{r}
 #| label: load
 #| include: false
-cur <- \(stem) here::here("data", "curated", paste0(stem, "_", FRAME_SNAPSHOT, ".parquet"))
-
-context   <- arrow::read_parquet(cur("tower_context"))
-frame     <- arrow::read_parquet(cur("frame"))
-locations <- arrow::read_parquet(cur("tower_locations"))
-special   <- readr::read_csv(
-  here::here("data", "reference", "special_towers_draft.csv"),
-  col_types = readr::cols(.default = "c")
-)
-
-# Every measure the context table carries, kernels first, then radii.
-measures <- grep("^pop_(k|r)\\d+km$", names(context), value = TRUE) |>
-  sub(pattern = "^pop_", replacement = "")
-measures <- measures[order(!startsWith(measures, "k"),
-                           as.numeric(gsub("\\D", "", measures)))]
-
-# One row per FRAME tower (D-017, D-019). Display and country from the first
-# frame ring; bells per MULTI_RING_BELLS.
-tw <- frame |>
-  dplyr::filter(.data$frame_full) |>
-  dplyr::summarise(
-    bells   = if (MULTI_RING_BELLS == "max") max(.data$bells) else sum(.data$bells),
-    country = dplyr::first(.data$country),
-    display = dplyr::first(.data$display),
-    .by = "tower_id"
-  ) |>
-  dplyr::inner_join(locations, by = "tower_id") |>
-  dplyr::inner_join(context, by = "tower_id") |>
-  dplyr::left_join(
-    special |> dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
-      dplyr::select("tower_id", special = "category"),
-    by = "tower_id"
-  ) |>
+# Frame towers (D-017, D-019), with their bell class and broad region.
+tw <- frame_towers |>
   dplyr::mutate(
-    smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
     bell_class = cut(.data$bells, BELL_BREAKS, BELL_LABELS, right = FALSE),
     region = dplyr::case_when(
       .data$country %in% c("England", "Wales") ~ "England & Wales",
@@ -120,7 +46,15 @@ tw <- frame |>
     )
   )
 
-n_missing_context <- sum(frame$frame_full) - sum(frame$frame_full & frame$tower_id %in% context$tower_id)
+# Every distance measure the context table carries: kernels first, then
+# circles, each from the tightest out. Names are read only by the helpers in
+# R/catchment.R.
+measures <- grep("^pop_[kr][0-9]+(m|km)$", names(context), value = TRUE) |>
+  sub(pattern = "^pop_", replacement = "")
+measures <- measures[order(measure_type(measures) != "kernel", measure_metres(measures))]
+
+n_missing_context <- sum(frame$frame_full) -
+  sum(frame$frame_full & frame$tower_id %in% context$tower_id)
 ```
 
 *Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
@@ -129,17 +63,20 @@ reviewed.*
 
 ## Background and brief
 
-**The question.** The census will chase about 1,000 randomly drawn towers
+**Where this fits.** The census will chase about 1,000 randomly drawn towers
 until each one replies. Comparing them with towers that reply unprompted
 shows who does not respond, and lets the estimates correct for it. The draw
-is to be stratified by number of bells and by how urban or rural a tower is.
-This chapter is about the second of those: how to describe "urban" and
-"rural" well enough to stratify by.
+is to be stratified by number of bells and by what sort of place a tower is
+in. Three chapters work towards that:
+
+- this chapter describes the towers and their surroundings;
+- *Choosing a classification* turns that description into named place types;
+- *Choosing a sampling method* uses the types and measures to design the
+  draw.
 
 **Starting points Mark set out.**
 
-- *Urban is not one thing.* At least three different effects are mixed
-  together:
+- *Urban is not one thing.* At least three effects are mixed together:
   - the size of the settlement, which sets how many people live near enough
     to ring;
   - large towns have fewer towers than their size suggests, because of how
@@ -151,49 +88,60 @@ This chapter is about the second of those: how to describe "urban" and
 - *It should work outside England without rework*, even though the
   dynamics abroad are probably different.
 - *Measure around each tower, not by area.* Ready-made area classifications
-  such as the ONS Rural Urban Classification are included for comparison, but
-  are not expected to be the answer.
+  are kept for comparison, but are not expected to be the answer.
 - *Use distance decay, not just circles.* A circle of fixed radius gives
   full weight just inside its edge and none just outside. A decay kernel
   avoids that cliff. Plain circles are computed too, because they are easier
   to explain.
-- *Competition matters as much as distance.* From gravity models of retail
-  catchments: nearby rival destinations shrink a catchment more than a
-  steeper fall-off with distance does. The ratio of people to towers, or to
-  bells, stands in for that competition. A fuller model that splits each
-  person's pull between competing towers (a Huff model) was considered and
-  set aside as more complex than needed for now.
-- *Bells matter for parity.* Ringers feel some obligation to ring, and a
-  band much bigger than its ring of bells means people sitting out at
-  practice. That pushes the number of ringers towards the number of bells,
-  so people per bell is as relevant as people per tower.
+- *Competition matters as much as distance.* Nearby rival towers shrink a
+  catchment, as rival shops do in retail gravity models. People per tower,
+  and per bell, stand in for that.
+- *Bells matter for parity.* A band much bigger than its ring means people
+  sitting out, so people per bell is as relevant as people per tower.
+- *Ring size records history.* The number of bells reflects what a place was
+  when its bells were cast and augmented: its size, wealth and the standing
+  of its church. Mark's own home tower, Amersham, went from 8 to 12 bells
+  after he learned there, so the record is not perfect.
+- *Villages absorbed into conurbations matter.* Towns grew over villages
+  that already had bells, so those towers now sit amid far more people than
+  their ring size suggests. Places rarely shrink as much, so the mismatch
+  runs mostly one way, and the model should be asymmetric. Mark's analogy is
+  used-car adverts: fairly priced cars sell and vanish, overpriced ones
+  linger, so a fair valuation model listens most to the cheap side.
+- *Tighter scales, and a check for interactions* (Mark, 10 October). Ring
+  size correlated best with the tightest measure first computed, the 1 km
+  circle. Tighter measures (250 m and 500 m kernels, a 500 m circle) test
+  whether that correlation peaks. A decision tree, on the kernels only, looks
+  for interactions between scales.
 
-**What this chapter is for.** To see how the measures vary and move
-together, so that sensible boundaries can be drawn. A named classification
-is wanted for communication, and the analytical team are expected to
-calibrate, test and name it. Nothing here is a decision. The choices at the
-top of the source are starting points.
+**What this chapter is for.** To show how the measures behave, how they
+relate to each other and to ring size, so that the next chapter can draw
+boundaries that mean something. Nothing here is a decision.
 
-**Out of scope.** Choosing the final strata, and the sampling method itself.
+**Out of scope.** Choosing the place types, and the sampling method.
 
 ## What the measures are
 
-For each tower, script 08 counts three things nearby: **people** (resident
-population from the EU's Global Human Settlement Layer), **towers** and
-**bells** (both from the sampling frame, the tower itself included). It
-counts them in two ways:
+Script 08 describes the area around each tower in three ways.
 
-- **Decay kernels**, named `k1km` to `k8km`. Nearer things count more, and
-  the weight halves every 1, 2, 4 or 8 km. The 2 km kernel is the main one.
-  Its scale comes from published travel data for weekly voluntary activities,
-  such as swimming and church attendance, which imply a half-distance of
-  about 1.5–2.3 km.
-- **Plain circles**, named `r1km` to `r10km`. Everything within the radius
+- **Decay kernels**, named `k250m` to `k8km`. Nearer things count more, and
+  the weight halves every 250 m, 500 m, 1, 2, 4 or 8 km. The 2 km kernel is
+  the main catchment measure. Its scale comes from published travel data for
+  weekly voluntary activities, such as swimming and church attendance, which
+  imply a half-distance of about 1.5–2.3 km.
+- **Plain circles**, named `r500m` to `r10km`. Everything within the radius
   counts equally.
+- **Contiguous settlements.** The continuous built-up area the tower stands
+  in, traced on the international Degree of Urbanisation's 1 km grid with
+  that scheme's own rules, and the number of people living in it. Unlike the
+  kernels and circles, this follows the settlement's own edge.
 
-Ratios follow: **people per tower** and **people per bell**. Columns are
-named by what they count and how, for example `pop_k2km` or
-`pop_per_bell_r5km`.
+The kernels and circles count three things: **people** (from the EU's Global
+Human Settlement Layer), and **towers** and **bells** (from the sampling
+frame, the tower itself included). Ratios follow: **people per tower**,
+**people per bell**, and **people per km² of land**, which stops the sea
+counting as empty country. Columns are named by what they count and how, for
+example `pop_k2km` or `density_land_r500m`.
 
 ```{r}
 #| label: headline
@@ -203,14 +151,34 @@ named by what they count and how, for example `pop_k2km` or
 # Kernels against circles
 pop_mat <- tw |> dplyr::select(dplyr::all_of(paste0("pop_", measures)))
 rho  <- stats::cor(pop_mat, method = "spearman")
-kern <- paste0("pop_", grep("^k", measures, value = TRUE))
-rad  <- paste0("pop_", grep("^r", measures, value = TRUE))
+kern <- paste0("pop_", measures[measure_type(measures) == "kernel"])
+rad  <- paste0("pop_", measures[measure_type(measures) == "radius"])
 best_radius <- tibble::tibble(kernel = kern) |>
   dplyr::mutate(
     best_radius = rad[apply(rho[kern, rad, drop = FALSE], 1, which.max)],
     spearman    = round(apply(rho[kern, rad, drop = FALSE], 1, max), 3)
   )
 k2 <- dplyr::filter(best_radius, .data$kernel == "pop_k2km")
+
+# Ring size against density at every scale, ordered by how far each measure
+# really looks (the radius holding half its weight).
+scale_cor <- tibble::tibble(column = grep("^density_land_", names(bi), value = TRUE)) |>
+  dplyr::mutate(
+    measure   = sub("^density_land_", "", .data$column),
+    label     = measure_label(.data$measure),
+    type      = measure_type(.data$measure),
+    half_mass = measure_half_mass_m(.data$measure),
+    spearman  = purrr::map_dbl(.data$column, \(v)
+      stats::cor(bi$bells, bi[[v]], method = "spearman", use = "complete.obs"))
+  ) |>
+  dplyr::arrange(.data$half_mass)
+best_scale <- dplyr::slice_max(scale_cor, .data$spearman, n = 1)
+tightest   <- dplyr::slice_min(scale_cor, .data$half_mass, n = 1)
+peaks <- tightest$spearman < best_scale$spearman
+
+# Contiguous settlements
+in_centre_share <- mean(!is.na(tw$centre_pop))
+big_cluster     <- mean(tw$urban_pop >= 5e6, na.rm = TRUE)
 
 # Principal components
 X <- tw |>
@@ -222,6 +190,14 @@ scores <- as.data.frame(pca$x[, 1:N_PCS])
 var_share <- pca$sdev^2 / sum(pca$sdev^2)
 pc1_all_same_sign <- length(unique(sign(pca$rotation[, 1]))) == 1
 pc2_top <- names(sort(abs(pca$rotation[, 2]), decreasing = TRUE))[1:2]
+# Plain-English names for the findings text
+plain <- function(v) {
+  what <- dplyr::case_when(startsWith(v, "pop_")    ~ "population",
+                           startsWith(v, "towers_") ~ "tower density",
+                           startsWith(v, "bells_")  ~ "bell density",
+                           TRUE ~ v)
+  paste0(what, " (", measure_label(v), ")")
+}
 
 # Clusters and silhouettes
 km_fits <- purrr::map(K_RANGE, \(k) stats::kmeans(scores, centers = k, nstart = 50, iter.max = 100))
@@ -231,26 +207,39 @@ sil_by_k <- purrr::map_dbl(km_fits, \(f)
   mean(cluster::silhouette(f$cluster[sil_idx], d_sub)[, "sil_width"]))
 k_best <- K_RANGE[which.max(sil_by_k)]
 
-pct <- scales::label_percent(accuracy = 1)
-rural_share <- mean(tw$smod_class %in% c("Very low density rural", "Low density rural",
-                                         "Rural cluster"))
+london_top <- bi |>
+  dplyr::filter(.data$in_frame) |>
+  dplyr::slice_max(.data$u, n = 50) |>
+  dplyr::summarise(share = mean(grepl("London", .data$display))) |>
+  dplyr::pull(.data$share)
 ```
 
 ## Headline findings
 
-- **The towers do not fall into natural groups.** A silhouette score
-  measures how cleanly a clustering separates the data, from −1 to 1. The
-  best here is `r round(max(sil_by_k), 2)`, at k = `r k_best`.
+- **Ring size tracks the settlement's core, at a scale of about
+  `r fmt(best_scale$half_mass)` m.** Its rank correlation with density is
+  highest for the `r best_scale$label` (`r round(best_scale$spearman, 3)`).
+  `r if (peaks) paste0("It is slightly lower for the tighter ", tightest$label, " (", round(tightest$spearman, 3), "), so the curve peaks, gently, rather than rising without limit.") else paste0("It is still rising at the tightest measure, the ", tightest$label, ", so the peak may be tighter still.")`
+- **Rings of 3 to 7 bells sit in the same kind of place.** Allowing for
+  growth since their bells were hung, the typical density around a ring of 3
+  is `r fmt(frontier$frontier[1])` people per km² of land, and around a ring
+  of 6–7 it is `r fmt(frontier$frontier[3])`. The step comes with rings of 8
+  (`r fmt(frontier$frontier[4])`) and 10 or more (`r fmt(frontier$frontier[5])`).
+- **Growth around towers is large and one-sided.** In the asymmetric model,
+  "growth since the bells" varies more than ordinary noise
+  (`r round(sfa$su, 2)` against `r round(sfa$sv, 2)` on a log10 scale). Of
+  the 50 towers grown around most, `r pct(london_top)` are in London.
+- **Contiguity separates places that distance cannot.**
+  `r pct(in_centre_share)` of frame towers stand inside an urban centre, a
+  continuous built-up area of 50,000 people or more. The looser "urban
+  cluster" joins too much: `r pct(big_cluster)` of the frame towers that are
+  in one are in a cluster of more than five million people.
+- **The towers do not fall into natural groups.** The best silhouette score
+  is `r round(max(sil_by_k), 2)`, at k = `r k_best`.
   `r if (max(sil_by_k) < 0.5) "That is below the 0.5 usually taken as clear structure, so any classes are a convenience for communication, not a discovery." else "That is above the 0.5 usually taken as clear structure, so the groups may be real."`
-- **Two dimensions carry `r pct(sum(var_share[1:2]))` of the variation.**
-  `r if (pc1_all_same_sign) "The first moves with every measure at once, so it is overall size." else "The first does not move with every measure, so read its loadings before calling it size."`
-  The second is driven mostly by `r pc2_top[1]` and `r pc2_top[2]`.
 - **The circles track the kernels closely.** The 2 km kernel ranks towers
-  almost exactly as the `r sub("pop_", "", k2$best_radius)` circle does (rank
-  correlation `r k2$spearman`). So in a meeting the 2 km kernel can be
-  described as "people within about 5 km, nearer ones counting more".
-- **`r pct(rural_share)` of frame towers** sit in the three rural classes of
-  the international Degree of Urbanisation.
+  almost exactly as the `r measure_label(k2$best_radius)` does (rank
+  correlation `r k2$spearman`).
 
 ## Coverage
 
@@ -267,12 +256,12 @@ If it is not, script 08's scope or the coordinates need checking.
 
 ## How each measure is distributed
 
-Each panel is one measure on a log scale. The kernels and radii should look
+Each panel is one measure on a log scale. The kernels and circles should look
 alike in shape; the question is how much they differ in spread.
 
 ```{r}
 #| label: fig-dist
-#| fig-height: 9
+#| fig-height: 12
 #| fig-cap: "Distribution of each measure across frame towers (log10 of value + 1)."
 long <- tw |>
   dplyr::select("tower_id", dplyr::matches(paste0("^(pop|towers|pop_per_bell)_(",
@@ -306,13 +295,13 @@ long |>
   knitr::kable(caption = "Quantiles across frame towers")
 ```
 
-## Do the radii add anything to the kernels?
+## Do the circles add anything to the kernels?
 
-If a radius ranks towers almost exactly as a kernel does, the radius can be
+If a circle ranks towers almost exactly as a kernel does, the circle can be
 used to explain the kernel to a meeting, and nothing is lost. The table gives,
-for each kernel, the radius with the highest rank correlation.
+for each kernel, the circle with the highest rank correlation.
 
-Expect the matching radius to be much wider than the half-distance. Over
+Expect the matching circle to be much wider than the half-distance. Over
 uniform ground, half of a kernel's total weight lies within about 2.4
 half-distances, and 90% within about 5.6. So a "1 km" kernel draws most of its
 weight from within about 5 km. To a meeting, describe the 2 km kernel as
@@ -321,13 +310,17 @@ weight from within about 5 km. To a meeting, describe the 2 km kernel as
 
 ```{r}
 #| label: tbl-kernel-radius
-best_radius |> knitr::kable()
+best_radius |>
+  dplyr::mutate(kernel = measure_label(.data$kernel),
+                best_radius = measure_label(.data$best_radius)) |>
+  dplyr::rename(`best-matching circle` = "best_radius") |>
+  knitr::kable()
 ```
 
 ```{r}
 #| label: fig-kernel-radius
 #| fig-height: 4
-#| fig-cap: "2 km kernel against the 2 km and 5 km radii. Points far off the band are towers where the radius edge cuts through a town."
+#| fig-cap: "2 km kernel against the 2 km and 5 km circles. Points far off the band are towers where the circle's edge cuts through a town."
 tw |>
   dplyr::select("pop_k2km", "pop_r2km", "pop_r5km") |>
   tidyr::pivot_longer(c("pop_r2km", "pop_r5km"), names_to = "radius") |>
@@ -335,7 +328,7 @@ tw |>
   geom_point(size = 0.6, alpha = 0.25, colour = PAL_CAT[1]) +
   facet_wrap(~radius) +
   coord_cartesian(xlim = c(lg(stats::quantile(tw$pop_k2km, 0.002)), NA)) +
-  labs(x = "log10 population, 2 km kernel", y = "log10 population, radius")
+  labs(x = "log10 population, 2 km kernel", y = "log10 population, circle")
 ```
 
 ## Correlation structure
@@ -346,7 +339,7 @@ interesting structure is in the off-diagonal blocks.
 
 ```{r}
 #| label: fig-corr
-#| fig-height: 8
+#| fig-height: 10
 #| fig-cap: "Spearman correlations between all measures."
 all_vars <- tw |>
   dplyr::select(dplyr::matches(paste0("^(pop|towers|bells|pop_per_bell)_(",
@@ -389,7 +382,7 @@ floor_8km <- lg(stats::quantile(tw$pop_k8km, 0.002))
 
 ## Local scale against wider scale
 
-This plane carries most of your three phenomena:
+This plane carries most of the three effects Mark described:
 
 - **Up the diagonal:** hamlet, then village, then town, then city.
 - **Above the diagonal:** low local population but high wider population. A
@@ -400,7 +393,7 @@ This plane carries most of your three phenomena:
 ```{r}
 #| label: fig-local-wide
 #| fig-height: 6
-#| fig-cap: "Local (2 km kernel) against wider (8 km kernel) population, coloured by GHSL Degree of Urbanisation."
+#| fig-cap: "Local (2 km kernel) against wider (8 km kernel) population, coloured by the international Degree of Urbanisation."
 ggplot(tw, aes(lg(pop_k2km), lg(pop_k8km), colour = smod_class)) +
   geom_point(size = 0.8, alpha = 0.6) +
   scale_colour_manual(values = PAL_SMOD, drop = TRUE, name = NULL) +
@@ -415,7 +408,7 @@ The vertical distance from the main band is a candidate single index of
 ```{r}
 #| label: fig-embedded
 #| fig-height: 4
-#| fig-cap: "Embeddedness, log10(8 km kernel) minus log10(2 km kernel), by Degree of Urbanisation."
+#| fig-cap: "Embeddedness, log10(8 km) minus log10(2 km), by Degree of Urbanisation."
 tw |>
   dplyr::mutate(embedded = lg(.data$pop_k8km) - lg(.data$pop_k2km)) |>
   ggplot(aes(smod_class, embedded)) +
@@ -461,33 +454,377 @@ tw |>
   labs(x = NULL, y = "log10 population per bell")
 ```
 
-## The off-the-shelf classes
+## Contiguous settlements: following the settlement's own edge
 
-How the GHSL Degree of Urbanisation and the ONS 2021 Rural Urban
-Classification split the frame, and how they line up with each other.
+**Why they are needed.** Kernels and circles count everyone within reach,
+whether or not they live in the same place as the tower. A free-standing city
+ringed by green belt and a stretch of continuous suburb can therefore score
+alike. What tells them apart is whether the built-up area is continuous.
+
+**How they are traced.** The international Degree of Urbanisation already
+labels every 1 km cell. Script 08 joins the labelled cells back into
+continuous patches, using the scheme's own rules, and sums each patch's
+population.^[Eurostat (2021), *Applying the Degree of Urbanisation*. See
+*Methods and sources*.]
+
+- **Urban centre:** cells of at least 1,500 people per km², joined edge to
+  edge only, "without diagonals", and totalling at least 50,000 people.
+- **Urban cluster:** cells of at least 300 per km², joined "including
+  diagonals", totalling at least 5,000. Centres are included.
+- **Rural cluster:** the grid's nearest thing to a village, from 500 to
+  4,999 people.
 
 ```{r}
-#| label: tbl-smod-bells
+#| label: tbl-contiguous
 tw |>
-  dplyr::count(.data$smod_class, .data$bell_class) |>
-  tidyr::pivot_wider(names_from = "bell_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Frame towers by Degree of Urbanisation and bells")
+  dplyr::filter(.data$british_isles) |>
+  dplyr::mutate(
+    where = dplyr::case_when(
+      !is.na(.data$centre_pop) & .data$centre_pop >= 1e6 ~ "Urban centre of 1 million or more",
+      !is.na(.data$centre_pop) & .data$centre_pop >= 2e5 ~ "Urban centre of 200,000 to 1 million",
+      !is.na(.data$centre_pop)                         ~ "Urban centre of 50,000 to 200,000",
+      !is.na(.data$urban_pop)                          ~ "Urban cluster, outside any centre",
+      !is.na(.data$rural_cluster_pop)                  ~ "Rural cluster",
+      TRUE                                             ~ "None: dispersed rural"
+    ),
+    where = factor(.data$where, levels = c(
+      "Urban centre of 1 million or more", "Urban centre of 200,000 to 1 million",
+      "Urban centre of 50,000 to 200,000", "Urban cluster, outside any centre",
+      "Rural cluster", "None: dispersed rural"))
+  ) |>
+  dplyr::summarise(towers = dplyr::n(),
+                   `median people within 1 km` = fmt(stats::median(.data$pop_r1km)),
+                   `rings of 8 or more` = pct(mean(.data$bells >= 8)),
+                   .by = "where") |>
+  dplyr::mutate(share = pct(.data$towers / sum(.data$towers))) |>
+  dplyr::arrange(.data$where) |>
+  knitr::kable(caption = "British Isles frame towers by the contiguous settlement they stand in")
+```
+
+**Urban centres work; urban clusters join too much.** Because urban clusters
+join diagonally and include low-density suburban cells, they chain towns
+together. In the South East of England, one cluster runs from London out to
+places such as St Albans and Welwyn. Urban centres, joined edge to edge at a
+higher density, keep St Albans separate from London while placing Staines
+inside it. That matches how the places feel to ringers who know them (the
+next chapter's sense check has the detail).
+
+`r sum(tw$settlement_window_edge)` frame towers sit in a settlement that was
+cut by its tracing window, almost all of them in or near London. For them the
+settlement's population is a lower bound, but still in the millions, so no
+class changes.
+
+## Ring size is a record of what a place used to be
+
+The question: does the number of bells tell us what sort of place a tower
+is in? The figure shows today's density around every British Isles tower,
+grouped by ring size.
+
+```{r}
+#| label: fig-ring-density
+#| fig-height: 4.5
+#| fig-cap: "People per km² of land within the 2 km kernel, by ring size (British Isles, all ringable full-circle rings of 3+). Boxes: middle half. Black diamonds: the asymmetric model's typical density for each ring size, with 95% intervals."
+ggplot(bi, aes(ring_class, .data[[DENSITY_VAR]])) +
+  geom_boxplot(aes(fill = ring_class), outlier.size = 0.3, outlier.alpha = 0.3,
+               colour = "grey30", width = 0.6) +
+  geom_pointrange(data = frontier, aes(y = frontier, ymin = lower, ymax = upper),
+                  shape = 23, fill = "black", size = 0.4) +
+  scale_y_log10(labels = scales::label_comma()) +
+  scale_fill_manual(values = RING_PAL, guide = "none") +
+  labs(x = "Bells in the ring", y = "People per km² of land (log scale)")
 ```
 
 ```{r}
-#| label: tbl-smod-ruc
-tw |>
-  dplyr::filter(!is.na(.data$ruc21nm)) |>
-  dplyr::count(.data$ruc21nm, .data$smod_class) |>
-  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "England & Wales: ONS RUC 2021 against Degree of Urbanisation")
+#| label: tbl-ring-density
+bi |>
+  dplyr::summarise(
+    towers = dplyr::n(),
+    `10th pct` = stats::quantile(.data[[DENSITY_VAR]], 0.10),
+    `25th`     = stats::quantile(.data[[DENSITY_VAR]], 0.25),
+    median     = stats::median(.data[[DENSITY_VAR]]),
+    `75th`     = stats::quantile(.data[[DENSITY_VAR]], 0.75),
+    `90th`     = stats::quantile(.data[[DENSITY_VAR]], 0.90),
+    .by = "ring_class"
+  ) |>
+  dplyr::arrange(.data$ring_class) |>
+  dplyr::mutate(dplyr::across(-c("ring_class", "towers"), fmt)) |>
+  knitr::kable(caption = "People per km² of land around towers, by ring size")
 ```
 
-## Principal components
+Two things stand out. The spread within every ring size is enormous: the
+middle half of towers with six bells spans more than a factor of four in
+density. And the spread is lopsided. Each box has a long upper tail of towers
+in far denser places than is typical for their ring size.
 
-Principal components boil the six clustering measures (logged and
-standardised) down to a few combined scores. The loadings table shows which
-measures drive each score, which is how to name it.
+### Which distance scale tracks ring size best?
+
+Kernels and circles of the same nominal size look very different distances.
+To compare them on one scale, each is placed by the radius that holds half
+its weight: about 2.4 half-distances for a kernel, and 0.71 of the radius for
+a circle.
+
+```{r}
+#| label: fig-scale
+#| fig-height: 4
+#| fig-cap: "Rank correlation of ring size with land density, against how far each measure really looks (radius holding half its weight, log scale). British Isles, rings of 3+."
+ggplot(scale_cor, aes(half_mass, spearman, colour = type)) +
+  geom_line(aes(group = type), linewidth = 0.4, alpha = 0.6) +
+  geom_point(size = 2.5) +
+  ggplot2::geom_text(aes(label = .data$measure), vjust = -0.9, size = 3, show.legend = FALSE) +
+  scale_x_log10(labels = scales::label_comma()) +
+  scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.15))) +
+  scale_colour_manual(values = c(kernel = PAL_CAT[1], radius = PAL_CAT[2]),
+                      labels = c(kernel = "Kernel", radius = "Circle"), name = NULL) +
+  labs(x = "Radius holding half the weight (m)", y = "Spearman correlation with bells")
+```
+
+```{r}
+#| label: tbl-scale
+scale_cor |>
+  dplyr::transmute(measure = .data$label,
+                   `half its weight within (m)` = fmt(.data$half_mass),
+                   spearman = round(.data$spearman, 3)) |>
+  knitr::kable(caption = "Rank correlation of ring size with land density, tightest measure first")
+```
+
+**What the scales show.** The correlation is highest for the
+`r best_scale$label`, which holds half its weight within about
+`r fmt(best_scale$half_mass)` m.
+`r if (peaks) paste0("It is lower again for the tightest measure, the ", tightest$label, ", so the correlation peaks rather than rising without limit. The peak is gentle: every measure reaching between about ", fmt(min(scale_cor$half_mass[scale_cor$spearman >= best_scale$spearman - 0.03])), " and ", fmt(max(scale_cor$half_mass[scale_cor$spearman >= best_scale$spearman - 0.03])), " m scores within 0.03 of the best.") else paste0("It is still rising at the tightest measure, the ", tightest$label, ", so the peak may be tighter still.")`
+Placed by their real reach, kernels and circles agree at the scale of the
+core. At wider scales the kernels track ring size slightly better than
+circles of the same reach, as expected of a measure without a hard edge.
+
+**Why the core.** Churches stand at the historic core of their settlement,
+and ring size reflects the size and standing of that core. Measures tighter
+than the core pick up the churchyard and the next street. Wider measures
+dilute the core with countryside or neighbouring places. The peak marks the
+natural size of a settlement core, as ring size sees it.
+
+**What it does not mean.** It does not make the tightest scale the right one
+for every purpose. Recruitment depends on the wider catchment, which ring
+size does not measure. Choosing a scale because it tracks ring size best
+would also bring ring size back into the place measures by another route.
+
+### A decision tree as a diagnostic
+
+A classification tree (CART)^[Breiman, Friedman, Olshen & Stone (1984). See
+*Methods and sources*.] splits the towers again and again on whichever
+measure best separates rings of 8 or more from smaller rings. It finds
+thresholds and interactions on its own: for example, whether a dense core
+matters more when the area around it is sparse. Two choices keep it honest:
+
+- **Kernels only.** Kernels and circles of similar reach are nearly
+  interchangeable. Offering both lets the tree pick between near-twins,
+  which spreads the importance between them and makes it hard to read
+  (Mark, 10 October). The coast is the one other measure offered, because it
+  is not a distance measure. Isolation is left out: it is a ratio of two
+  scales, and finding how scales combine is the tree's job.
+- **A diagnostic only.** Its target is ring size, so using its splits as
+  classes would build ring size back into the classification.
+
+```{r}
+#| label: tree
+tree_data <- bi |>
+  dplyr::filter(.data$in_frame) |>
+  dplyr::select("bells", dplyr::matches("^density_land_k[0-9]+(m|km)$"), "coast") |>
+  dplyr::mutate(
+    ring_8_plus = factor(.data$bells >= 8, levels = c(FALSE, TRUE),
+                         labels = c("under 8", "8 or more")),
+    dplyr::across(dplyr::starts_with("density_land_"), \(x) log10(x))
+  ) |>
+  dplyr::select(-"bells") |>
+  dplyr::filter(dplyr::if_all(dplyr::everything(), \(x) !is.numeric(x) | is.finite(x)))
+set.seed(2026)  # the cross-validation folds are random
+tree <- rpart::rpart(ring_8_plus ~ ., data = tree_data, method = "class",
+                     control = rpart::rpart.control(cp = 0.004, minbucket = 50))
+cp_tab <- as.data.frame(tree$cptable)
+importance <- round(100 * tree$variable.importance / sum(tree$variable.importance))
+tree_label <- \(v) ifelse(grepl("^density_land_", v), measure_label(ifelse(grepl("^density_land_", v), v, "k1km")), v)
+
+leaves <- leaf_rules(tree)
+leaves |>
+  dplyr::transmute(`towers in the group` = .data$rule, towers = .data$towers,
+                   `rings of 8 or more` = pct(.data$share)) |>
+  knitr::kable(caption = "The tree's groups, from fewest to most rings of 8 or more (people per km² of land)")
+```
+
+```{r}
+#| label: tbl-tree-importance
+tibble::tibble(measure = tree_label(names(importance)),
+               `importance (%)` = as.numeric(importance)) |>
+  knitr::kable(caption = "Which measures the tree leans on")
+```
+
+**What the tree finds.** The first split, on the
+`r tree_label(names(importance)[1])`, does most of the work. It alone cuts
+misclassification by `r pct(1 - cp_tab[["rel error"]][2])` against always
+guessing the commoner class. The full tree has `r max(cp_tab$nsplit)`
+splits and, on cross-validation, cuts misclassification by
+`r pct(1 - min(cp_tab[["xerror"]]))`. The later splits add little
+accuracy, but they are where any interaction between scales shows.
+
+```{r}
+#| label: tree-interaction
+#| include: false
+# Look for the typical interaction: two groups sharing a range on one measure
+# and split on a second, wider one.
+pair <- leaves |>
+  dplyr::filter(grepl(";", .data$rule)) |>
+  dplyr::mutate(core = sub(";.*$", "", .data$rule),
+                wider = sub("^[^;]*; ", "", .data$rule))
+interaction <- nrow(pair) == 2 && dplyr::n_distinct(pair$core) == 1 &&
+  !grepl(";", pair$wider[1]) && !grepl(";", pair$wider[2])
+if (interaction) {
+  sparse <- dplyr::filter(pair, grepl("under", .data$wider))
+  dense  <- dplyr::filter(pair, !grepl("under", .data$wider))
+  interaction <- nrow(sparse) == 1 && nrow(dense) == 1
+}
+say <- \(x) sub("(kernel|circle) ", "\\1 is ", x)   # "1 km kernel under 420" -> "... is under 420"
+```
+
+`r if (interaction) paste0("**It finds one.** Among towers where the ", say(pair$core[1]), " people per km² of land, those where the ", say(sparse$wider), " have ", pct(sparse$share), " rings of 8 or more, against ", pct(dense$share), " where the ", say(dense$wider), ". ", if (sparse$share > dense$share) "The same core density means more where the surroundings are sparse. That is the free-standing market town against the village absorbed into a larger place: alike at the church, different in history. A place classification that separates the two, without using bells, is on the right lines." else "Here denser surroundings go with larger rings.") else "**No clean interaction** between scales shows in this tree: read its groups directly."`
+
+**The better use of trees comes after fieldwork.** Once the census measures
+band size and response for the chased towers, a model-based tree^[Hothorn,
+Hornik & Zeileis (2006); Zeileis, Hothorn & Hornik (2008).] can partition the
+towers by how those outcomes vary with the place measures. That would give
+classes tuned to what the census is actually about, with no circularity.
+
+## A one-sided model separates the bells' story from later growth
+
+**Why an ordinary model misleads.** A standard ordinal regression of ring
+size on density^[McCullagh (1980). See *Methods and sources*.] assumes the
+scatter around the line is symmetric. Here it is not. A village swallowed by
+London has a density hundreds of times what its six bells suggest, and no
+plausible process produces the mirror image. Fitting a symmetric model lets
+those swallowed villages drag every boundary upwards.
+
+```{r}
+#| label: tbl-polr
+po <- MASS::polr(ring_class ~ ld, data = bi, Hess = TRUE)
+tibble::tibble(
+  boundary = names(po$zeta),
+  `density at boundary (people per km² of land)` = fmt(10^(po$zeta / stats::coef(po)))
+) |>
+  knitr::kable(caption = "Boundaries from a symmetric ordinal model, for comparison")
+```
+
+Where the boundaries above run from single figures to tens of thousands of
+people per km², the symmetric model cannot be describing real places.
+
+**The asymmetric model.** Mark's used-car analogy has an established
+statistical counterpart: the *stochastic frontier* model, developed in
+economics to separate a firm's random luck from its persistent
+inefficiency.^[Aigner, Lovell & Schmidt (1977); Meeusen & van den Broeck
+(1977).] The model splits each tower's density into three parts:
+
+- **What its ring size implies**, one value per ring-size class.
+- **Ordinary noise**, which can go either way: local accidents of geography
+  and history.
+- **Growth since**, which can only push density up: the town that grew
+  around the village.
+
+The model estimates how big each part is from the shape of the data alone,
+without being told which towers were absorbed. The ring-size values it
+returns are the densities typical of each ring size before growth: the black
+diamonds in the ring-size figure.
+
+```{r}
+#| label: tbl-sfa
+frontier |>
+  dplyr::mutate(dplyr::across(c("frontier", "lower", "upper"), fmt)) |>
+  dplyr::rename(`ring size` = "ring_class",
+                `typical density before growth` = "frontier",
+                `95% lower` = "lower", `95% upper` = "upper") |>
+  knitr::kable(caption = "Asymmetric model: typical density by ring size (people per km² of land, 2 km kernel)")
+```
+
+The spread of "growth since" (`r round(sfa$su, 2)`) is larger than the
+spread of ordinary noise (`r round(sfa$sv, 2)`), both in log10 units. In
+plain terms, growth explains more of the differences between towers with the
+same ring size than chance does. `r if (!sfa$converged) "**The fit did not converge cleanly: treat these numbers with caution.**" else ""`
+
+For each tower, the model also estimates how much of its density is "growth
+since", using the Jondrow method.^[Jondrow, Lovell, Materov & Schmidt
+(1982).] That estimate is called `u` below, in log10 units: a `u` of 1 means
+the tower's surroundings are about ten times as dense as its ring size
+alone would suggest.
+
+### Is "growth since" picking up absorbed villages?
+
+If it is, towers with high `u` should sit among many other towers, because
+every swallowed village brought its own church.
+
+```{r}
+#| label: tbl-u-checks
+bi |>
+  dplyr::summarise(
+    towers = dplyr::n(),
+    `median u` = round(stats::median(.data$u), 2),
+    `median towers nearby (2 km kernel)` = round(stats::median(.data$towers_k2km), 1),
+    .by = "smod_class"
+  ) |>
+  dplyr::arrange(.data$`median u`) |>
+  knitr::kable(caption = "Growth since the bells, by international Degree of Urbanisation class")
+```
+
+The rank correlation between `u` and the number of towers nearby is
+`r round(stats::cor(bi$u, bi$towers_k2km, method = "spearman"), 2)`.
+
+The towers grown around most, and the towers with the most bells for their
+surroundings, are the ones ringers will recognise most easily:
+
+```{r}
+#| label: tbl-u-extremes
+bind <- function(d, label) d |> dplyr::transmute(group = label, .data$display,
+  `people per km²` = fmt(.data[[DENSITY_VAR]]), u = round(.data$u, 2))
+dplyr::bind_rows(
+  bi |> dplyr::filter(.data$in_frame) |>
+    dplyr::slice_max(.data$u, n = 12) |> bind("Most grown around"),
+  bi |> dplyr::filter(.data$in_frame) |>
+    dplyr::slice_min(.data$resid, n = 12) |> bind("Most bells for the place")
+) |>
+  knitr::kable()
+```
+
+The second list mixes the historically important but now quiet (Dales and
+Welsh Marches churches) with modern exceptions such as ringing centres and
+Lundy. The model cannot tell those apart, and nor should it: both are towers
+whose ring size does not reflect today's population.
+
+## Isolation and the coast
+
+**Isolation** compares a tower's local density with its wider area: log10
+of land density in the 1 km circle divided by land density in the 8 km
+kernel. Above zero means a place denser than its surroundings, such as a
+market town in open country. Below zero means a sparse spot in a dense
+region, such as a village in a city's orbit.
+
+**Coast** is the share of the 8 km kernel's weight that falls on sea.
+Because density is measured per km² of land, the sea no longer makes a
+coastal town look empty. The coast is kept as its own measure, because the
+sea still halves the pool of people who can reach the tower.
+
+```{r}
+#| label: fig-isolation
+#| fig-height: 5
+#| fig-cap: "Isolation against coast, frame towers, coloured by the international Degree of Urbanisation."
+ggplot(tw, aes(coast, isolation, colour = smod_class)) +
+  geom_hline(yintercept = 0, colour = "grey60", linewidth = 0.3) +
+  geom_point(size = 0.7, alpha = 0.6) +
+  scale_colour_manual(values = PAL_SMOD, name = NULL, drop = TRUE) +
+  scale_x_continuous(labels = scales::label_percent()) +
+  guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 2)) +
+  labs(x = "Share of the 8 km kernel that is sea",
+       y = "Isolation: log10(local / wider land density)")
+```
+
+## Do the towers fall into natural groups?
+
+If the towers formed clear groups, the classification could simply name
+them. Principal components boil six measures (logged and standardised) down
+to a few combined scores, and k-means looks for groups in those scores.
 
 ```{r}
 #| label: pca
@@ -502,6 +839,11 @@ round(pca$rotation[, 1:min(4, ncol(X))], 2) |>
   knitr::kable(caption = "Loadings")
 ```
 
+**Two dimensions carry `r pct(sum(var_share[1:2]))` of the variation.**
+`r if (pc1_all_same_sign) "The first moves with every measure at once, so it is overall size." else "The first does not move with every measure, so read its loadings before calling it size."`
+The second is driven mostly by `r plain(pc2_top[1])` and
+`r plain(pc2_top[2])`.
+
 ```{r}
 #| label: fig-pca
 #| fig-height: 6
@@ -512,12 +854,10 @@ ggplot(dplyr::bind_cols(tw, scores), aes(PC1, PC2, colour = smod_class)) +
   guides(colour = guide_legend(override.aes = list(size = 3, alpha = 1), nrow = 2))
 ```
 
-## Candidate classification A: clusters
-
 k-means on the first `r N_PCS` components, for k from `r min(K_RANGE)` to
-`r max(K_RANGE)`. The elbow and the mean silhouette width are guides, not
-verdicts. What matters more is whether the clusters can be named and
-explained.
+`r max(K_RANGE)`. The silhouette width measures how cleanly a clustering
+separates the data, from −1 to 1; 0.5 or more is usually taken as clear
+structure.
 
 ```{r}
 #| label: fig-k
@@ -546,8 +886,7 @@ ggplot(k_diag, aes(k, value)) +
 fit <- km_fits[[which(K_RANGE == K_CLUSTERS)]]
 
 # Label clusters in a stable order (by median wider population, then local),
-# so C1 is always the most rural. The labels are placeholders for the
-# analytical team to name.
+# so C1 is always the most rural.
 tw$cluster_raw <- fit$cluster
 cl_order <- tw |>
   dplyr::summarise(w = stats::median(.data$pop_k8km), l = stats::median(.data$pop_k2km),
@@ -576,18 +915,7 @@ tw |>
     .by = "cluster"
   ) |>
   dplyr::arrange(.data$cluster) |>
-  knitr::kable(caption = "Cluster profiles (medians)")
-```
-
-Five towers drawn at random from each cluster, as a first aid to naming:
-
-```{r}
-#| label: tbl-cluster-examples
-tw |>
-  dplyr::slice_sample(n = 5, by = "cluster") |>
-  dplyr::arrange(.data$cluster) |>
-  dplyr::summarise(examples = paste(.data$display, collapse = "; "), .by = "cluster") |>
-  knitr::kable()
+  knitr::kable(caption = paste0("Cluster profiles at k = ", K_CLUSTERS, " (medians)"))
 ```
 
 ```{r}
@@ -602,131 +930,11 @@ ggplot(tw, aes(lg(pop_k2km), lg(pop_k8km), colour = cluster)) +
   labs(x = "log10 population, 2 km kernel", y = "log10 population, 8 km kernel")
 ```
 
-```{r}
-#| label: fig-cluster-map
-#| fig-height: 9
-#| fig-cap: "Clusters mapped: Great Britain, with London, the West Midlands and Norfolk enlarged."
-gb <- dplyr::filter(tw, .data$country %in% c("England", "Wales", "Scotland"))
-ggplot(gb, aes(lon, lat, colour = cluster)) +
-  geom_point(size = 0.5, alpha = 0.8) +
-  scale_colour_manual(values = PAL_CL, name = NULL) +
-  coord_quickmap() +
-  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 1)) +
-  labs(x = NULL, y = NULL) +
-  theme(axis.text = element_blank(), panel.grid = element_blank())
-```
-
-```{r}
-#| label: fig-cluster-zoom
-#| fig-height: 5
-zooms <- tibble::tribble(
-  ~area,            ~lon_min, ~lon_max, ~lat_min, ~lat_max,
-  "London",           -0.55,     0.35,    51.25,    51.75,
-  "West Midlands",    -2.35,    -1.55,    52.30,    52.70,
-  "Norfolk",           0.40,     1.80,    52.35,    53.00
-)
-zoomed <- purrr::pmap(zooms, \(area, lon_min, lon_max, lat_min, lat_max)
-  tw |>
-    dplyr::filter(dplyr::between(.data$lon, lon_min, lon_max),
-                  dplyr::between(.data$lat, lat_min, lat_max)) |>
-    dplyr::mutate(area = area)) |>
-  purrr::list_rbind()
-
-ggplot(zoomed, aes(lon, lat, colour = cluster)) +
-  geom_point(size = 1.4, alpha = 0.9) +
-  scale_colour_manual(values = PAL_CL, name = NULL) +
-  facet_wrap(~area, scales = "free") +
-  guides(colour = guide_legend(override.aes = list(size = 3), nrow = 1)) +
-  labs(x = NULL, y = NULL) +
-  theme(axis.text = element_blank(), panel.grid = element_blank())
-```
-
-## Candidate classification B: a simple two-scale grid
-
-Easier to explain than clusters. Bands of local population crossed with bands
-of wider population, giving at most nine cells. With no breaks set, these are
-tertiles.
-
-```{r}
-#| label: grid
-band <- function(x, breaks, labels) {
-  if (is.null(breaks)) breaks <- stats::quantile(x, c(1/3, 2/3))
-  cut(x, c(-Inf, breaks, Inf), labels = labels, right = FALSE)
-}
-tw <- tw |>
-  dplyr::mutate(
-    local = band(.data$pop_k2km, LOCAL_BREAKS, c("small place", "mid", "large place")),
-    wide  = band(.data$pop_k8km, WIDE_BREAKS,  c("sparse area", "mid", "dense area")),
-    grid  = interaction(.data$local, .data$wide, sep = " / ", lex.order = TRUE)
-  )
-
-used_local <- if (is.null(LOCAL_BREAKS)) stats::quantile(tw$pop_k2km, c(1/3, 2/3)) else LOCAL_BREAKS
-used_wide  <- if (is.null(WIDE_BREAKS))  stats::quantile(tw$pop_k8km, c(1/3, 2/3)) else WIDE_BREAKS
-
-tw |>
-  dplyr::count(.data$local, .data$wide) |>
-  tidyr::pivot_wider(names_from = "wide", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Frame towers in each grid cell (rows: local; columns: wider)")
-```
-
-Breaks used: local `r paste(fmt(used_local), collapse = " and ")` people
-(2 km kernel); wider `r paste(fmt(used_wide), collapse = " and ")` people
-(8 km kernel).
-
-How the grid lines up with the clusters and with the Degree of Urbanisation:
-
-```{r}
-#| label: tbl-grid-compare
-tw |>
-  dplyr::count(.data$grid, .data$cluster) |>
-  tidyr::pivot_wider(names_from = "cluster", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Grid cells against clusters")
-
-tw |>
-  dplyr::count(.data$grid, .data$smod_class) |>
-  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Grid cells against Degree of Urbanisation")
-```
-
-## What each candidate means for stratification
-
-Strata are candidate class x bell class. The table shows the frame count in
-each cell and the expected number of chased towers under proportional
-allocation at n = `r fmt(N_CHASED)`. Cells expecting fewer than about 10 give
-unstable stratum estimates and would need collapsing.
-
-```{r}
-#| label: tbl-strata
-strata_table <- function(class_col, label) {
-  tw |>
-    dplyr::count(class = .data[[class_col]], .data$bell_class) |>
-    dplyr::mutate(expected = round(.data$n / nrow(tw) * N_CHASED, 1)) |>
-    dplyr::summarise(
-      candidate = label,
-      cells = dplyr::n(),
-      cells_under_10 = sum(.data$expected < 10),
-      smallest_expected = min(.data$expected)
-    )
-}
-dplyr::bind_rows(
-  strata_table("smod_class", "Degree of Urbanisation (GHSL)"),
-  strata_table("cluster",    paste0("Clusters, k = ", K_CLUSTERS)),
-  strata_table("grid",       "Two-scale grid")
-) |>
-  knitr::kable(caption = "Stratum cell sizes, candidate x bell class")
-```
-
-```{r}
-#| label: tbl-strata-detail
-tw |>
-  dplyr::count(.data$cluster, .data$bell_class) |>
-  dplyr::mutate(cell = paste0(.data$n, " (", round(.data$n / nrow(tw) * N_CHASED), ")")) |>
-  dplyr::select(-"n") |>
-  tidyr::pivot_wider(names_from = "bell_class", values_from = "cell", values_fill = "0", names_sort = TRUE) |>
-  knitr::kable(caption = "Clusters x bells: frame towers (expected chased towers)")
-```
-
-## Where the special-case towers fall
+**What the clusters say.** With a best silhouette of
+`r round(max(sil_by_k), 2)`, the clusters cut a continuum rather than
+finding groups. The plane above shows it: the clusters are slices of one
+cloud. Settlement is a continuum, so any classes must be chosen for meaning
+and communication, which is the next chapter's job.
 
 ```{r}
 #| label: tbl-special
@@ -737,32 +945,87 @@ tw |>
   knitr::kable(caption = "Draft special-case list against clusters")
 ```
 
-If the City of London towers do not form, or sit inside, a distinct cluster,
-that supports handling them by list rather than by measure.
+The City of London towers do not form a cluster of their own. That supports
+handling them by list rather than by measure.
 
 ## Outside the British Isles
 
-The measures use the same definitions everywhere. Whether the clusters still
-mean the same thing abroad is a separate question.
+The measures use the same definitions everywhere. Whether they mean the same
+thing abroad is a separate question.
 
 ```{r}
 #| label: tbl-abroad
 tw |>
-  dplyr::count(.data$region, .data$cluster) |>
-  tidyr::pivot_wider(names_from = "cluster", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Clusters by region")
+  dplyr::count(.data$region, .data$smod_class) |>
+  tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
+  knitr::kable(caption = "Frame towers by region and Degree of Urbanisation")
 ```
 
 ## For the analytical team
 
 Questions this chapter is meant to help answer:
 
-1. **Kernels or radii?** If the radii track the kernels closely, use radii
-   in anything said to a meeting.
-2. **How many dimensions?** If two components carry most of the variance, a
-   two-scale grid may communicate as well as clusters do.
-3. **Which k, and what are the clusters called?** Use the example towers and
-   the maps. Names should be things a ringer would recognise.
-4. **Do the special-case towers need a list?** Or do the measures find them?
-5. **Which candidate gives workable strata** once crossed with bells, at
-   about 1,000 chased towers?
+1. **Which scale describes a tower's own place?** The ring-size peak points
+   to a core of about `r fmt(best_scale$half_mass)` m. Is that the right
+   scale for "own settlement", or should it be chosen on other grounds?
+2. **Kernels or circles?** At the core scale they agree once placed by their
+   real reach. Use whichever is easier to explain there; prefer kernels for
+   wide catchments.
+3. **Is "growth since the bells" worth keeping** as a measure of absorbed
+   villages, alongside the contiguous-settlement measures?
+4. **Do the special-case towers need a list?** The clusters suggest so.
+
+## Methods and sources
+
+**Central place theory.** Christaller, W. (1933), *Die zentralen Orte in
+Süddeutschland*, Jena: Gustav Fischer. Settlements form a hierarchy in which
+larger places serve wider areas and hold more specialised functions. A
+church's ring size is plausibly one such function.
+
+**Contiguous settlements.** Eurostat (2021), *Applying the Degree of
+Urbanisation: a methodological manual to define cities, towns and rural areas
+for international comparisons*, Publications Office of the EU. Urban centre:
+"Contiguous cells (without diagonals and with gap filling) with a density of
+at least 1 500 inhabitants/km² and a minimum of 50 000 inhabitants". Urban
+cluster: "Contiguous cells (including diagonals) with a density of at least
+300 inhabitants/km² and a minimum of 5 000 inhabitants". Implemented here on
+GHS-SMOD R2023A (Schiavina et al. 2023).
+
+**Stochastic frontier models.** Aigner, D., Lovell, C. A. K. & Schmidt, P.
+(1977), "Formulation and estimation of stochastic frontier production
+function models", *Journal of Econometrics* 6(1), 21–37. Meeusen, W. & van
+den Broeck, J. (1977), *International Economic Review* 18(2), 435–444. The
+error is split into symmetric noise and a one-sided term, here "growth
+since". The normal / half-normal form used here is the standard first
+choice.
+
+**Estimating each unit's one-sided term.** Jondrow, J., Lovell, C. A. K.,
+Materov, I. S. & Schmidt, P. (1982), "On the estimation of technical
+inefficiency in the stochastic frontier production function model",
+*Journal of Econometrics* 19(2–3), 233–238.
+
+**Ordinal regression.** McCullagh, P. (1980), "Regression models for
+ordinal data", *Journal of the Royal Statistical Society B* 42(2),
+109–142. Used here only to show how a symmetric model misplaces the
+boundaries.
+
+**An alternative to the frontier model.** Quantile regression (Koenker, R. &
+Bassett, G. (1978), "Regression quantiles", *Econometrica* 46(1), 33–50)
+would fit a low quantile of density for each ring size. That is simpler,
+but needs a quantile to be chosen by hand. The frontier model estimates the
+split from the data.
+
+**Classification trees.** Breiman, L., Friedman, J. H., Olshen, R. A. &
+Stone, C. J. (1984), *Classification and Regression Trees*, Wadsworth.
+Implemented in R by the `rpart` package, which ships with R. For trees whose
+splits are chosen by significance tests rather than greedily: Hothorn, T.,
+Hornik, K. & Zeileis, A. (2006), "Unbiased recursive partitioning: a
+conditional inference framework", *Journal of Computational and Graphical
+Statistics* 15(3), 651–674. For trees that split on how a model's
+relationships change: Zeileis, A., Hothorn, T. & Hornik, K. (2008),
+"Model-based recursive partitioning", *Journal of Computational and
+Graphical Statistics* 17(2), 492–514. Both are in the R package `partykit`.
+
+**Clusters.** Rousseeuw, P. J. (1987), "Silhouettes: a graphical aid to the
+interpretation and validation of cluster analysis", *Journal of
+Computational and Applied Mathematics* 20, 53–65.

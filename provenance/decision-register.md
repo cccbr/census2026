@@ -4,8 +4,8 @@ Current state, at a glance. The reasoning lives in `decisions.md`, which is
 append-only; this file is maintained by hand and shows where things stand
 now.
 
-**Last reviewed: 2026-09-30** — after the committee meeting of 2026-09-20
-(Elva, Vicki, Tina, Mark).
+**Last reviewed: 2026-10-11.** Previous full review 2026-09-30, after the
+committee meeting of 2026-09-20 (Elva, Vicki, Tina, Mark).
 
 Statuses: **Provisional** (Mark's working decision, not team-agreed) ·
 **Agreed** (ratified by the project team) · **Agreed in principle** (endorsed,
@@ -39,6 +39,9 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-024 | ~~Tower list always fetched~~ — superseded by D-025 | Superseded |
 | D-025 | Tower list checked once per questionnaire (browser tab); stored copy used thereafter. Timeouts 20 s with nothing stored, 3 s with a copy | Provisional |
 | D-026 | Settlement measures: exponential kernels (half-distances 1/2/4/8 km, prior mode 2 km) and plain radii (1/2/5/10 km). Huff / competing-destinations allocation considered and deferred | Provisional |
+| D-027 | Tighter measures (250 m and 500 m kernels, 500 m circle) and contiguous-settlement measures (urban centre, urban cluster, rural cluster, distance to nearest urban centre) | Provisional |
+| D-028 | The settlement classification uses place measures only, never ring size | Provisional |
+| D-029 | Working classification is Draft B: town line 1,500 people within 1 km; conurbation line 575,000 (in a gap in centre sizes, keeping Bristol a conurbation); Welwyn accepted as a known disagreement | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
@@ -78,7 +81,7 @@ Display strings are unique across all 6,297 picker entries (D-020).
 | Q-015 | Does the network dependency need naming in the DPIA and privacy notice? | The committee has been informed (transparency). DPIA coverage still to be confirmed |
 | Q-018 | Confirm the volunteer-country list | Currently Australia and USA, marked `expected` in the reference CSV. Needs an owner who maintains it |
 | Q-022 | **Special-case towers**: who is on the list, and are they a certainty stratum or handled outside the chased sample? | Draft list (81 rows, all `proposed`) in `data/reference/special_towers_draft.csv`. Needed before the draw |
-| Q-023 | **The settlement classification used to stratify the chased sample** | Candidates are explored in `analysis/tower-context.qmd`: GHSL Degree of Urbanisation, k-means clusters, a two-scale grid. Needed before the draw. Analytical team to calibrate and name |
+| Q-023 | **The settlement classification used to stratify the chased sample, and the sampling design** | Place measures only (D-028). Working proposal: Draft B in `analysis/settlement-classes.qmd` (urban centres for cities, suburbs and inner cities; people within 1 km for towns, villages and small villages or hamlets). Working classification per D-029; to be validated with the analysis volunteers' known towers and, ideally, register data on towers with no band of their own. A measure-based "historic city core" type is offered but not adopted. Designs compared in `analysis/sampling-design.qmd`. Needed before the draw |
 
 ## Open — needed before analysis
 
