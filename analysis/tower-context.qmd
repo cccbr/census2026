@@ -71,7 +71,8 @@ tested with the other analysis volunteers.*
 - **A tower's own place is best described at the scale of its core,** about
   1 km. Ring size tracks density most closely there, which fits the church
   standing at the historic heart of its settlement. *Used for:* the town,
-  village and hamlet lines (people within 1 km).
+  village and hamlet lines (people in the 250 m kernel, which reaches as far
+  as a 1 km circle without its hard edge).
 - **Cities need the settlement's own edge, not a radius.** Continuous
   built-up areas, traced with the international Degree of Urbanisation's
   rules, separate a free-standing city from a suburb where distance measures
@@ -932,7 +933,7 @@ whose ring size does not reflect today's population.
 ## Isolation and the coast
 
 **Isolation** compares a tower's local density with its wider area: log10
-of land density in the 1 km circle divided by land density in the 8 km
+of land density in the 250 m kernel divided by land density in the 8 km
 kernel. Above zero means a place denser than its surroundings, such as a
 market town in open country. Below zero means a sparse spot in a dense
 region, such as a village in a city's orbit.

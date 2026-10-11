@@ -41,9 +41,11 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-026 | Settlement measures: exponential kernels (half-distances 1/2/4/8 km, prior mode 2 km) and plain radii (1/2/5/10 km). Huff / competing-destinations allocation considered and deferred | Provisional |
 | D-027 | Tighter measures (250 m and 500 m kernels, 500 m circle) and contiguous-settlement measures (urban centre, urban cluster, rural cluster, distance to nearest urban centre) | Provisional |
 | D-028 | The settlement classification uses place measures only, never ring size | Provisional |
-| D-029 | Working classification is Draft B: town line 1,500 people within 1 km; conurbation line 575,000 (in a gap in centre sizes, keeping Bristol a conurbation); Welwyn accepted as a known disagreement | Provisional |
+| D-029 | Working classification is Draft B: town line 1,500 people within 1 km; conurbation line 575,000 (in a gap in centre sizes, keeping Bristol a conurbation); Welwyn accepted as a known disagreement (since D-033, agreement) | Provisional |
 | D-030 | Multi-tower questions use a multi picker: composite `Display [RingID]` per tower, separated by ` \| `, at most 12 | Provisional |
 | D-031 | Historic city core is a place type: in an urban centre with 30+ bells at other towers within 1 km, or on the special list (now a backstop) | Provisional |
+| D-032 | Town and village lines on the 250 m kernel (475 and 175), not the 1 km circle; city-core test keeps its circle | Provisional |
+| D-033 | Draft B lines are land densities in the 250 m kernel (village 300, town 600, inner city 8,000 per km²); no centre-point methods; small-city suburbs a candidate only; Welwyn agrees | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 

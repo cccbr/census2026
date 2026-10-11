@@ -109,18 +109,19 @@ st_albans <- known_row("15782")
 # ---- reclassify with one threshold changed (for sensitivity tables) ---------
 reclass <- function(d, ...) {
   th <- utils::modifyList(DRAFT_B, list(...))
-  classify_settlement_b(d$centre_pop, d[[INNER_VAR]], d$pop_r1km, d$other_bells_1km,
+  classify_settlement_b(d$centre_pop, d$centre_density, d[[LOCAL_VAR]], d$other_bells_1km,
                         d$society, th, TYPE_LEVELS)
 }
 # The town line at which Draft B's town share comes closest to 1988's.
 town_88 <- counts_1988$share_best[counts_1988$type_1988 == "Town"]
 town_b  <- shares_vs_1988$draft_b[shares_vs_1988$type_1988 == "Town"]
-line_grid <- seq(1000, 3000, by = 250)
+line_grid <- seq(300, 1500, by = 50)
 town_share_at <- purrr::map_dbl(line_grid, \(t)
-  mean(reclass(comparable_1988, town_pop_1km = t) == "Town"))
+  mean(reclass(comparable_1988, town_density = t) == "Town"))
 line_88 <- line_grid[which.min(abs(town_share_at - town_88))]
-village_b_at_88 <- mean(reclass(comparable_1988, town_pop_1km = line_88) %in%
+village_b_at_88 <- mean(reclass(comparable_1988, town_density = line_88) %in%
                           c("Village", "Small village or hamlet"))
+
 ```
 
 *Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
@@ -144,12 +145,12 @@ frame_towers |>
   dplyr::left_join(tibble::tibble(
     type = factor(TYPE_LEVELS, levels = TYPE_LEVELS),
     `in plain words` = c(
-      paste0("Fewer than ", fmt(DRAFT_B$village_pop_1km), " people within 1 km"),
-      paste0(fmt(DRAFT_B$village_pop_1km), " to ", fmt(DRAFT_B$town_pop_1km - 1), " people within 1 km"),
-      paste0("At least ", fmt(DRAFT_B$town_pop_1km), " people within 1 km, outside any city"),
+      paste0("Under ", fmt(DRAFT_B$village_density), " people per km² of land around the church"),
+      paste0(fmt(DRAFT_B$village_density), " to ", fmt(DRAFT_B$town_density), " people per km² of land around the church"),
+      paste0(fmt(DRAFT_B$town_density), "+ people per km² of land around the church, outside any city"),
       paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people"),
       paste0("In a conurbation of ", fmt(DRAFT_B$conurbation_pop), " or more, away from its densest parts"),
-      paste0("In a conurbation's densest parts (", fmt(DRAFT_B$inner_density), "+ people per km²)"),
+      paste0("In a conurbation's densest parts (", fmt(DRAFT_B$inner_density), "+ people per km² of land)"),
       paste0("In a city centre with ", fmt(DRAFT_B$core_other_bells), "+ bells at other towers within 1 km")
     )), by = "type") |>
   dplyr::select("type", "in plain words", "frame towers", "share") |>
@@ -161,13 +162,16 @@ frame_towers |>
 - Place measures only. Ring size checks the types but never defines them.
 - Cities, suburbs and conurbations come from the continuous built-up area,
   so St Albans (its own city) and Staines (part of London) fall apart.
-- The town line is `r fmt(DRAFT_B$town_pop_1km)` people within 1 km, which
-  matches 1988's share of towns.
+- Town, village and inner-city lines are densities (people per km² of land,
+  measured with a 250 m kernel), so they compare directly with the
+  international lines of 300 and 1,500 per km², and no place flips at an
+  arbitrary circle edge. The town line matches 1988's share of towns.
 - The conurbation line sits in a gap between city sizes, with Bristol inside.
 - Historic city cores are found by a measure, with the special list as a
   backstop.
-- Welwyn reading as a town is accepted as a known disagreement: on the
-  measures it is Old Amersham's twin.
+- Welwyn and Amersham are both towns. Mark's 1920s map shows historic Welwyn
+  and Amersham equal in size, scale and centrality, so this is now agreement,
+  not a known disagreement.
 
 **Still open.**
 
@@ -238,24 +242,24 @@ decision register (Q-022, Q-023).
 - **The working draft (Draft B) starts from the settlement the tower stands
   in.** A tower inside a continuous built-up area of 50,000 or more is in a
   city, a suburb or an inner city, depending on the area's size and the
-  local density. Elsewhere, the number of people within 1 km makes it a town,
-  a village, or a small village or hamlet.
+  local density. Elsewhere, the number of people around the church makes it
+  a town, a village, or a small village or hamlet.
 - **Draft B's shares are close to 1988's.** Mapped onto 1988's five types,
   it puts `r pct(village_b)` of comparable towers in villages and
   `r pct(town_b)` in towns, against 1988's `r pct(village_88)` and
-  `r pct(town_88)`. `r if (line_88 == DRAFT_B$town_pop_1km) paste0("The town line of ", fmt(DRAFT_B$town_pop_1km), " people within 1 km is the one that best matches 1988's share of towns.") else paste0("A town line of ", fmt(line_88), " people within 1 km, instead of ", fmt(DRAFT_B$town_pop_1km), ", would match 1988's share of towns more closely.")`
+  `r pct(town_88)`. `r if (line_88 == DRAFT_B$town_density) "The town line is the one that best matches 1988's share of towns." else paste0("A town line of ", fmt(line_88), " per km², instead of ", fmt(DRAFT_B$town_density), ", would match 1988's share of towns more closely.")`
 - **It finds historic city cores by measure.** `r sum(frame_towers$type == "Historic city core")`
   frame towers stand in a city centre with at least
   `r fmt(DRAFT_B$core_other_bells)` bells at other towers within 1 km, or are
   on the special list.
 - **It splits the villages.** `r pct(type_share[["Small village or hamlet"]])`
-  of frame towers are in a small village or hamlet, with fewer than
-  `r fmt(DRAFT_B$village_pop_1km)` people within 1 km. Only
+  of frame towers are in a small village or hamlet, under
+  `r fmt(DRAFT_B$village_density)` people per km² of land around the church. Only
   `r pct(p8_of("Small village or hamlet"))` of them have 8 or more bells,
   against `r pct(p8_of("Village"))` in larger villages.
 - **It matches `r sum(known_b$agree)` of `r nrow(known_b)` known towers.**
   St Albans and Staines now fall apart as Mark described.
-  `r if (nrow(welwyn) == 1 && !welwyn$agree) "Welwyn is the miss: it reads as a town, though it feels like a village. On the measures it is Amersham's twin, which Mark accepts." else ""`
+  `r misses <- known_b$display[!known_b$agree]; if (length(misses) > 0) paste0("Misses: ", paste(misses, collapse = "; "), ".") else ""`
 
 ## How 1988 classified places
 
@@ -463,12 +467,20 @@ knows and by comparison with 1988:
 | Type | Rule |
 | --- | --- |
 | Historic city core | In an urban centre, with at least `r fmt(DRAFT_B$core_other_bells)` bells at *other* towers within 1 km; or on the special list as a society, City of London or central London tower |
-| Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land in the `r measure_label(INNER_VAR)` |
+| Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land around the church |
 | Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density |
 | City or large town | In an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
-| Town | Not in an urban centre, with at least `r fmt(DRAFT_B$town_pop_1km)` people within 1 km |
-| Village | `r fmt(DRAFT_B$village_pop_1km)` to `r fmt(DRAFT_B$town_pop_1km - 1)` people within 1 km |
-| Small village or hamlet | Fewer than `r fmt(DRAFT_B$village_pop_1km)` people within 1 km |
+| Town | Not in an urban centre, with at least `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
+| Village | `r fmt(DRAFT_B$village_density)` to `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
+| Small village or hamlet | Under `r fmt(DRAFT_B$village_density)` people per km² of land around the church |
+
+"Around the church" means the `r measure_label(LOCAL_VAR)`: people nearby,
+nearer ones counting more, divided by the land the kernel covers, so the sea
+does not count as empty country. The international Degree of Urbanisation's
+lines are 300 people per km² (a cluster, rural or urban) and 1,500 (an urban
+centre), in the same units of people per km².^[Whether the Degree of
+Urbanisation divides by land or by the whole 1 km cell has not been checked
+here. Inland the two are the same.]
 
 An **urban centre** is a continuous built-up area, traced on the Degree of
 Urbanisation's 1 km grid with its own rules: cells of at least 1,500 people
@@ -494,26 +506,27 @@ tables below show what moving them does.
   a city across it (the table below lists the centres either side). It takes
   in London and the large metropolitan areas, which 1988 called the "major
   conurbations", and Bristol, as Mark wanted.
-- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km²:* first set so
-  that inner-city towers, with the special list, were about as common as in
-  1988, about 2%. With the historic city cores now a type of their own, it
-  gives `r scales::label_percent(accuracy = 0.1)(mean(frame_towers$type == "Inner city"))`.
-  Still open. Density is a rough stand-in for what 1988 meant by inner city,
+- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km² of land:* set
+  so that inner-city towers and city cores together are about as common as
+  in 1988's inner city, about 2%. It gives
+  `r scales::label_percent(accuracy = 0.1)(mean(frame_towers$type == "Inner city"))`
+  inner city on its own. Still open. Density is a rough stand-in for what 1988 meant by inner city,
   which was as much about deprivation as density.
-- *Town, `r fmt(DRAFT_B$town_pop_1km)` people within 1 km:* the line that
-  best matches 1988's share of towns (Mark, 11 October). It is below the
-  Scottish "small town" line of 3,000 residents, so some places ringers
-  might call large villages count as towns. In a compact settlement most
-  people live within 1 km of the church, so this points to a place of a
-  couple of thousand or more.
-- *Village, `r fmt(DRAFT_B$village_pop_1km)` people within 1 km:* the
-  smallest population the Degree of Urbanisation counts as a rural cluster,
-  its nearest thing to a village. Below it are hamlets, and villages small
-  enough to struggle for a band.
+- *Town, `r fmt(DRAFT_B$town_density)` people per km² of land:* the line
+  that best matches 1988's share of towns (Mark, 11 October). It sits between
+  the international cluster line (300) and urban-centre line (1,500).
+- *Village, `r fmt(DRAFT_B$village_density)` people per km² of land:* the
+  international density for a cluster, rural or urban. Below it are hamlets,
+  and villages small enough to struggle for a band.
 
-**Why 1 km for the town and village lines.** Ring size correlates best with
-density at about this scale (the previous chapter). It is the scale of a
-settlement's core: the church and the streets around it.
+**Why a 250 m kernel, and why density** (Mark, 11 October). Ring size tracks
+density best at the scale of a settlement's core, about 600–700 m out (the
+previous chapter), and the 250 m kernel looks that far. Unlike a 1 km
+circle, it has no hard edge, so a village whose neighbour starts 1.1 km away
+does not flip class because of where the edge falls. Expressing the lines as
+density keeps them in the same units as the international scheme. The
+historic-city-core test keeps a crisp 1 km circle, because there a compact
+cluster of towers is the point.
 
 ### How the shares compare with 1988
 
@@ -537,11 +550,11 @@ ringers per bell, and the most Surprise ringing.
 
 **Where Draft B still differs from 1988.** Two gaps remain.
 
-- *Towns and villages.* `r if (line_88 == DRAFT_B$town_pop_1km) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " people within 1 km would match 1988's share.")`
+- *Towns and villages.* `r if (line_88 == DRAFT_B$town_density) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " per km² would match 1988's share.")`
 - *Fewer suburbs, more cities.* 1988's "Suburban" probably included the
   suburbs of large towns and smaller cities, which Draft B counts as part of
-  the city. Draft B keeps "Suburban" for conurbations, where the loss of a
-  place's own identity is greatest.
+  the city. A candidate rule for those suburbs is tested in *Suburbs of
+  smaller cities* below.
 
 ```{r}
 #| label: tbl-types
@@ -596,7 +609,7 @@ known_b |>
     match = ifelse(.data$agree, "yes", "**no**"),
     `Draft A` = as.character(.data$type_a),
     `people within 500 m` = fmt(.data$pop_r500m),
-    `people within 1 km` = fmt(.data$pop_r1km),
+    `people per km² of land around the church` = fmt(.data[[LOCAL_VAR]]),
     `urban centre (people)` = ifelse(is.na(.data$centre_pop), "none", fmt(.data$centre_pop)),
     `nearest urban centre (km)` = round(.data$centre_dist_km, 1),
     `international class` = as.character(.data$smod_class)
@@ -614,61 +627,67 @@ known_b |>
   `r fmt(staines$centre_pop)`. This is the distinction Draft A could not draw.
 - **Oxford and York are cities, and the City of London towers are on the
   special list.** Both as they feel.
-- **Amersham is a town, as it feels.** It has
-  `r fmt(amersham$pop_r1km)` people within 1 km. Its newer half,
-  Amersham-on-the-Hill, where most of the ringers live, lies up the hill
-  from the church.
-- **Welwyn reads as a town, though it feels like a village.** It has
-  `r fmt(welwyn$pop_r1km)` people within 1 km, more than Amersham's
-  `r fmt(amersham$pop_r1km)`, and sits `r round(welwyn$centre_dist_km, 1)` km
-  from the nearest urban centre, much as Amersham does
-  (`r round(amersham$centre_dist_km, 1)` km). In Mark's words, "Welwyn is to
-  WGC as Old Amersham is to Amersham": an older place beside a larger, newer
-  one. "Old Amersham feels bigger than Welwyn, but they're very comparable in
-  truth."
-
-**The honest conclusion on Welwyn and Amersham.** What separates them is
-identity: Amersham-on-the-Hill is part of a place called Amersham, while
-Welwyn Garden City is a different place. The grid cannot see names. Three
-options:
-
-1. *Accept it* as a known disagreement. Chosen (Mark, 11 October): a
-   classification that matches every known tower would be fitted to the
-   list, not to places.
-2. *Raise the town line* to about 4,000. Both would become villages, which
-   is wrong for Amersham.
-3. *Use named built-up areas* (ONS 2022 Built-up Areas) for England and
-   Wales. That would honour names, but break the rule that the method works
-   the same everywhere.
+- **Amersham and Welwyn are both towns, and now both feel it.** Amersham has
+  `r fmt(amersham[[LOCAL_VAR]])` people per km² of land around the church,
+  Welwyn `r fmt(welwyn[[LOCAL_VAR]])`; each sits about
+  `r round(mean(c(amersham$centre_dist_km, welwyn$centre_dist_km)))` km from
+  the nearest urban centre. Mark first felt Welwyn was a village. A 1920s map
+  changed his mind: historic Welwyn and historic Amersham were equal in size,
+  scale and centrality, and "Welwyn is to WGC as Old Amersham is to
+  Amersham". Before Amersham was augmented they also had the same number of
+  bells, and both are St Mary's. The rules saw the two as twins all along.
 
 More known towers, especially outside the South East, would show whether
 cases like these are rare or common.
 
 ### Urban centres near the conurbation line
 
-The conurbation line sits in a gap between urban-centre sizes. The table
-lists the centres either side, with the places that have most frame towers
+The conurbation line sits in a gap between urban-centre sizes. The tables
+list the centres either side, with the places that have most frame towers
 in each, so that a re-run which moves a city across the line is visible.
+The line was chosen on UK cities, so they come first; a few centres
+elsewhere follow, to show how the line reads abroad.
 
 ```{r}
-#| label: tbl-centres
+#| label: centres-prep
+#| include: false
 centre_names <- towers |>
   dplyr::filter(!is.na(.data$centre_pop), .data$in_frame) |>
   dplyr::mutate(place = sub(",.*$", "", .data$display),
                 place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place)) |>
   dplyr::summarise(towers_include = paste(utils::head(names(sort(table(.data$place), decreasing = TRUE)), 3),
                                          collapse = ", "),
-                   `frame towers` = dplyr::n(), .by = "centre_pop")
-centre_names |>
-  dplyr::filter(.data$centre_pop >= DRAFT_B$conurbation_pop / 2,
-                .data$centre_pop <= DRAFT_B$conurbation_pop * 2) |>
+                   uk = mean(.data$uk) > 0.5,
+                   country = names(sort(table(.data$country), decreasing = TRUE))[1],
+                   `frame towers` = dplyr::n(), .by = "centre_key") |>
+  dplyr::left_join(dplyr::distinct(dplyr::select(towers, "centre_key", "centre_pop")), by = "centre_key")
+centre_table <- function(d) d |>
   dplyr::arrange(dplyr::desc(.data$centre_pop)) |>
   dplyr::mutate(side = ifelse(.data$centre_pop >= DRAFT_B$conurbation_pop,
                               "conurbation", "city or large town"),
-                people = fmt(.data$centre_pop), .before = "towers_include") |>
+                people = fmt(.data$centre_pop))
+```
+
+```{r}
+#| label: tbl-centres-uk
+centre_names |>
+  dplyr::filter(.data$uk,
+                .data$centre_pop >= DRAFT_B$conurbation_pop / 2,
+                .data$centre_pop <= DRAFT_B$conurbation_pop * 2) |>
+  centre_table() |>
   dplyr::select(`frame towers include` = "towers_include", "people", "frame towers", "side") |>
-  knitr::kable(caption = paste0("Urban centres between half and twice the conurbation line of ",
+  knitr::kable(caption = paste0("UK urban centres between half and twice the conurbation line of ",
                                 fmt(DRAFT_B$conurbation_pop), " people"))
+```
+
+```{r}
+#| label: tbl-centres-abroad
+centre_names |>
+  dplyr::filter(!.data$uk) |>
+  centre_table() |>
+  dplyr::slice_head(n = 8) |>
+  dplyr::select("country", `frame towers include` = "towers_include", "people", "frame towers", "side") |>
+  knitr::kable(caption = "The largest urban centres with frame towers outside the UK")
 ```
 
 ### Historic city cores
@@ -705,26 +724,110 @@ the concentration of historic ringing better than a count of towers. The
 tower's own bells are left out: with them included, bells within 1 km
 correlate about 0.9 with the tower's own ring size; without them, about 0.2.
 
+### Suburbs of smaller cities: test cases
+
+**The question.** Draft B calls every tower in a smaller city (under
+`r fmt(DRAFT_B$conurbation_pop)` people) "City or large town". In 1988,
+"Suburban" probably also covered the suburbs of such cities: 11% of towers
+then, against Draft B's `r pct(mean(comparable_1988$type == "Suburban"))`.
+Mark's view, from Gloucester and Cheltenham: the eights out at the edges
+make sense as suburban, in the orbit of the city as villages are in the orbit
+of a conurbation. His prior, not yet tested: the more ambitious ringers cross
+between city and suburb bands, while less experienced members keep to their
+suburb. The census's own question on where people rang in census week
+(D-030) could test that.
+
+**A candidate rule (not yet adopted).** In a smaller city, a tower is
+suburban if both hold:
+
+- it is less dense than its city's average (people per km² of land around
+  the church, against the urban centre's population divided by its area);
+  and
+- it has fewer than `r fmt(DRAFT_B$suburb_core_bells)` bells at other towers
+  within 1 km, so it is not in an old centre with churches close together.
+
+It uses density and bell density only. It needs no centre point, so it
+treats a city with no single heart, or one that grew lopsidedly (such as
+Luton), the same way as an old cathedral city. An earlier attempt measured
+distance from a "core" tower and was dropped (Mark, 11 October): it mangled
+centres made of several old towns, making Wakefield Cathedral a suburb of
+Batley.
+
+Why both tests: in Gloucester the cathedral quarter has few residents and is
+less dense than suburban Barnwood, so density alone would make the cathedral
+suburban. Its neighbouring towers keep it in the city.
+
+```{r}
+#| label: tbl-suburb-tests
+test_places <- c("Gloucester", "Cheltenham", "Barnwood", "Quedgeley", "Brockworth",
+                 "Upton St Leonards", "Charlton Kings", "Leckhampton", "Prestbury",
+                 "Luton", "Dunstable", "Wakefield", "Batley", "Dewsbury",
+                 "St Albans", "Exeter", "Norwich")
+suburb_test <- frame_towers |>
+  dplyr::filter(!is.na(.data$centre_pop), .data$centre_pop < DRAFT_B$conurbation_pop) |>
+  dplyr::mutate(place = sub(",.*$", "", .data$display),
+                place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place)) |>
+  dplyr::filter(.data$place %in% test_places)
+suburb_test$candidate <- as.character(reclass(suburb_test, small_city_suburbs = TRUE))
+suburb_test |>
+  dplyr::arrange(.data$centre_pop, dplyr::desc(.data[[LOCAL_VAR]])) |>
+  dplyr::transmute(`urban centre (people)` = fmt(.data$centre_pop), tower = .data$display,
+                   `density around the church` = fmt(.data[[LOCAL_VAR]]),
+                   `city average density` = fmt(.data$centre_density),
+                   `bells at other towers within 1 km` = .data$other_bells_1km,
+                   `Draft B now` = as.character(.data$type),
+                   `with the candidate rule` = .data$candidate) |>
+  knitr::kable(caption = "Test cases: towers in some smaller cities (densities in people per km²)")
+```
+
+```{r}
+#| label: tbl-suburb-effect
+with_sub <- reclass(frame_towers, small_city_suburbs = TRUE)
+with_sub_88 <- reclass(comparable_1988, small_city_suburbs = TRUE)
+in_small_city <- !is.na(frame_towers$centre_pop) & frame_towers$centre_pop < DRAFT_B$conurbation_pop
+tibble::tibble(
+  type = TYPE_LEVELS,
+  `Draft B now` = as.numeric(table(frame_towers$type)),
+  `with the candidate rule` = as.numeric(table(with_sub))
+) |>
+  knitr::kable(caption = "Frame towers per type, with and without the candidate rule")
+```
+
+**What it would do.** `r sum(with_sub == "Suburban") - sum(frame_towers$type == "Suburban")`
+frame towers would move from "City or large town" to "Suburban". On
+comparable towers, Suburban would rise to
+`r pct(mean(with_sub_88 == "Suburban"))`, against 1988's 11%. Among towers
+in smaller cities, rings of 8 or more are
+`r pct(mean(frame_towers$bells[in_small_city & with_sub == "City or large town"] >= 8))`
+in the city proper and
+`r pct(mean(frame_towers$bells[in_small_city & with_sub == "Suburban"] >= 8))`
+in the suburbs.
+
+**Its weak points.** A tower just below its city's average density flips to
+suburban, so the line is soft in a city whose density is even. And a
+free-standing large town of 50,000 gets suburbs too, which may not match how
+ringers see it. The test cases are the place to judge both.
+
 ### How sensitive the types are to each line
 
 ```{r}
 #| label: tbl-sens-town
-purrr::map(c(1500, 2000, 2500, 3000), \(t)
-  frame_towers |> dplyr::mutate(type = reclass(frame_towers, town_pop_1km = t)) |>
+purrr::map(sort(unique(c(400, 500, DRAFT_B$town_density, 800, 1000))), \(t)
+  frame_towers |> dplyr::mutate(type = reclass(frame_towers, town_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different town lines (people within 1 km)")
+  knitr::kable(caption = "Frame towers per type at different town lines (people per km² of land around the church)")
 ```
 
 ```{r}
 #| label: tbl-sens-village
-purrr::map(c(300, 500, 750, 1000), \(t)
-  frame_towers |> dplyr::mutate(type = reclass(frame_towers, village_pop_1km = t)) |>
+purrr::map(sort(unique(c(150, 200, DRAFT_B$village_density, 400))), \(t)
+  frame_towers |> dplyr::mutate(type = reclass(frame_towers, village_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different village lines (people within 1 km)")
+  knitr::kable(caption = "Frame towers per type at different village lines (people per km² of land around the church)")
 ```
 
 ```{r}

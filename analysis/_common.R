@@ -23,12 +23,19 @@ MULTI_RING_BELLS <- "max"                   # Q-020, open
 # Density measures, all people per km2 of LAND so the sea does not count as
 # empty.
 #   DENSITY_VAR: used to study ring size against density (2 km kernel).
-#   LOCAL_VAR:   the tower's own settlement. A 1 km circle matches the 1 km2
-#                cells the international Degree of Urbanisation is defined on.
+#   LOCAL_VAR:   the tower's own place: people per km2 of LAND in the 250 m
+#                kernel. One local measure for every density line in the
+#                classification (town, village, inner city, small-city
+#                suburb). Kernels throughout (Mark, 2026-10-11), except the
+#                historic-city-core test, where a crisp 1 km circle suits a
+#                compact cluster of towers. Densities, not counts, so the
+#                lines compare with the Degree of Urbanisation's 300 and
+#                1,500 per km2 (Mark, 2026-10-11).
 #   REGION_VAR:  the wider region (8 km kernel).
-DENSITY_VAR <- "density_land_k2km"
-LOCAL_VAR   <- "density_land_r1km"
-REGION_VAR  <- "density_land_k8km"
+DENSITY_VAR   <- "density_land_k2km"
+LOCAL_VAR     <- "density_land_k250m"
+REGION_VAR    <- "density_land_k8km"
+DRAFT_A_LOCAL_VAR <- "density_land_r1km"   # Draft A as it was, for comparison
 
 # Ring-size classes. Rings of 3 are outside the frame (4+ bells) but are used
 # in the structure analysis, because they say what sort of place has a small
@@ -44,33 +51,28 @@ DRAFT_A <- list(town_density = 300, town_pop = 5000,
                 city_density = 1500, city_pop = 50000,
                 region_density = 1000)
 
-# Draft B thresholds: the working draft (2026-10-11). See R/settlement.R.
-#   conurbation_pop: an urban centre this size or larger is a conurbation.
-#     Set in a gap in the size distribution, so that small changes in the
-#     data cannot move a city across it: on GHS-SMOD E2020 the centres run
-#     ... Sheffield 664k, Bristol 656k, Nottingham 636k | gap | Leicester
-#     513k, Edinburgh 512k ... 575,000 sits midway (on a log scale). That
-#     keeps Bristol a conurbation (Mark, 2026-10-11: its central towers are
-#     rung as a cluster, like a conurbation's), and matches 1988's "major
-#     conurbations". The chapter lists the centres near the line, so a
-#     re-run that moves one is visible.
-#   inner_density, measured with INNER_VAR: the inner-city line within a
-#     conurbation. Set so that inner-city towers are about as common as in
-#     1988 (about 2% of towers, with the special list).
-#   town_pop_1km: people within 1 km for a town outside an urban centre.
-#     1,500 (Mark, 2026-10-11) matches 1988's share of towns. It sits below
-#     the Scottish "small town" line of 3,000 residents.
-#   village_pop_1km: below this, a small village or hamlet. 500 is the
-#     smallest population the Degree of Urbanisation counts as a rural
-#     cluster, its nearest thing to a village.
+# Draft B thresholds: the working draft. See R/settlement.R. Every density
+# is people per km2 of LAND in the 250 m kernel (LOCAL_VAR).
 #   core_other_bells: a tower inside an urban centre with at least this many
 #     bells at OTHER frame towers within 1 km is in a historic city core
-#     (Mark, 2026-10-11). 30 is about four rings of eight. Other towers'
-#     bells, not all bells: the tower's own bells would tie the class to its
-#     own ring size (D-028).
+#     (D-031). 30 is about four rings of eight.
+#   conurbation_pop: an urban centre this size or larger is a conurbation.
+#     Set in a gap in UK centre sizes (Nottingham 636k | Leicester 513k), so
+#     small data changes cannot move a city across it; keeps Bristol in.
+#   inner_density: the inner-city line within a conurbation. About 2% of
+#     towers, as in 1988, with the city cores.
+#   town_density: a town outside an urban centre. Best match to 1988's share
+#     of towns.
+#   village_density: below this, a small village or hamlet. 300 per km2 is
+#     the Degree of Urbanisation's own density for a cluster, rural or urban.
+#   small_city_suburbs (CANDIDATE, off): in a smaller city, a tower is
+#     suburban if its density is below its city's average density AND it has
+#     fewer than suburb_core_bells bells at other towers within 1 km. Uses
+#     only density and bell density; no centre point.
 DRAFT_B <- list(core_other_bells = 30, conurbation_pop = 575000,
-                inner_density = 7000, town_pop_1km = 1500, village_pop_1km = 500)
-INNER_VAR <- "density_land_k500m"
+                inner_density = 8000, town_density = 600, village_density = 300,
+                small_city_suburbs = FALSE, suburb_core_bells = 12)
+INNER_VAR <- LOCAL_VAR
 
 # Special-list categories treated as "society or city-core" towers (Q-022).
 SOCIETY_CATEGORIES <- c("society_steeple_keeper", "city_of_london_other",
@@ -143,6 +145,7 @@ towers <- frame |>
     bells    = if (MULTI_RING_BELLS == "max") max(.data$bells) else sum(.data$bells),
     in_frame = any(.data$frame_full),
     country  = dplyr::first(.data$country),
+    county   = dplyr::first(.data$county),
     display  = dplyr::first(.data$display),
     .by = "tower_id"
   ) |>
@@ -156,14 +159,22 @@ towers <- frame |>
   dplyr::mutate(
     ring_class = cut(.data$bells, RING_BREAKS, RING_LABELS),
     ld         = log10(.data[[DENSITY_VAR]]),
-    isolation  = log10(.data[[LOCAL_VAR]] / .data[[REGION_VAR]]),
+    # +1 person per km2 keeps places with nobody within the tight kernel
+    # finite; it is negligible anywhere people live.
+    isolation  = log10((.data[[LOCAL_VAR]] + 1) / (.data[[REGION_VAR]] + 1)),
     coast      = 1 - .data$land_share_k8km,
     society    = !is.na(.data$special) & .data$special %in% SOCIETY_CATEGORIES,
     # Bells within 1 km at OTHER frame towers. bells_r1km counts frame towers
     # only, so a frame tower's own bells are subtracted; others never counted.
     other_bells_1km = .data$bells_r1km - ifelse(.data$in_frame, .data$bells, 0),
     smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
-    british_isles = .data$country %in% BRITISH_ISLES
+    british_isles = .data$country %in% BRITISH_ISLES,
+    # The UK: Great Britain plus the six counties of Northern Ireland (Dove
+    # files the whole island of Ireland as one country).
+    uk = .data$country %in% c("England", "Wales", "Scotland") |
+      (.data$country == "Island of Ireland" &
+         .data$county %in% c("Antrim", "Armagh", "Down", "Fermanagh", "Derry",
+                             "Londonderry", "Tyrone"))
   ) |>
   dplyr::filter(is.finite(.data$ld))
 
@@ -184,10 +195,15 @@ towers <- towers |>
   dplyr::mutate(
     resid = .data$ld - sfa$a[as.character(.data$ring_class)],
     u     = jlms_u(.data$resid, sfa$sv, sfa$su),
-    type_a = classify_settlement_a(.data[[LOCAL_VAR]], .data$pop_r2km, .data$pop_r5km,
+    type_a = classify_settlement_a(.data[[DRAFT_A_LOCAL_VAR]], .data$pop_r2km, .data$pop_r5km,
                                    .data[[REGION_VAR]], .data$society, DRAFT_A,
                                    TYPE_LEVELS_A),
-    type = classify_settlement_b(.data$centre_pop, .data[[INNER_VAR]], .data$pop_r1km,
+    # An identifier for each urban centre (its population and area together),
+    # and its average density (people per km2 of its 1 km cells).
+    centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
+                        paste(round(.data$centre_pop), .data$centre_km2)),
+    centre_density = .data$centre_pop / .data$centre_km2,
+    type = classify_settlement_b(.data$centre_pop, .data$centre_density, .data[[LOCAL_VAR]],
                                  .data$other_bells_1km, .data$society, DRAFT_B, TYPE_LEVELS)
   )
 bi <- dplyr::filter(towers, .data$british_isles)

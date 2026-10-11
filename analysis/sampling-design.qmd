@@ -108,11 +108,11 @@ pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
 # reversing direction in alternate groups ("serpentine") so neighbours in the
 # list stay similar across group boundaries.
 grp <- as.integer(interaction(pop$type, pop$ring_stratum, lex.order = TRUE, drop = TRUE))
-sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]]))
+sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]] + 1))
 
 # Place measures plus ring size. "Growth since the bells" is left out: it is
 # computed from ring size, so it would carry ring size in twice.
-spread_cov <- scale(cbind(log10(pop[[LOCAL_VAR]]), log10(pop[[REGION_VAR]]),
+spread_cov <- scale(cbind(log10(pop[[LOCAL_VAR]] + 1), log10(pop[[REGION_VAR]] + 1),
                           pop$isolation, pop$coast, log(pop$bells)))
 spread_geo <- cbind(spread_cov, scale(cbind(pop$east, pop$north)))
 stopifnot("spread measures must be complete" = all(is.finite(spread_geo)))

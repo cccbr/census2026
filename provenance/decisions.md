@@ -921,3 +921,52 @@ sampling design they form one stratum whatever their ring size.
 
 **Encoded in:** `R/settlement.R` (`classify_settlement_b`),
 `analysis/_common.R` (`DRAFT_B$core_other_bells`, `other_bells_1km`).
+
+## D-032 — Kernels for the town and village lines
+
+**2026-10-11 · Provisional (Mark)** · amends D-029
+
+**Decision.** The town and village lines use people in the 250 m kernel, not
+people within a 1 km circle. The historic-city-core test (D-031) keeps its
+crisp 1 km circle. Town line 475 (best match to 1988's share of towns);
+village line 175 (the kernel's equivalent of 500 people within 1 km).
+
+**Why.** Mark preferred one kind of measure for the wider classification:
+the circle's hard edge can flip a village whose neighbour starts just past
+1 km. The 250 m kernel looks about as far (half its weight within about
+600 m, against 700 m for the circle) and ranks towers almost identically
+(Spearman 0.94 on a trial run). The city-core test is different: there a
+compact cluster of towers is the point, and crisp edges suit it.
+
+**Cost.** Kernel figures are weighted counts, not head counts, so the
+chapter quotes rough circle equivalents for readers.
+
+**Also added, as a candidate only:** a rule for suburbs of smaller cities
+(distance from the city's historic core, relative to its radius), off by
+default (`DRAFT_B$small_city_suburbs`), with test cases in the chapter.
+
+## D-033 — Draft B's lines are land densities; no centre-point methods
+
+**2026-10-11 · Provisional (Mark)** · amends D-029 and D-032
+
+**Decision.**
+- Every density line in Draft B is people per km² of LAND in the 250 m
+  kernel: village 300 (the Degree of Urbanisation's cluster density), town
+  600 (best match to 1988's share of towns), inner city 8,000 (about 2% of
+  towers with the city cores). Densities, not kernel counts, so the lines
+  are relatable and compare with the international 300 and 1,500 per km².
+- No method that finds a city's centre and measures distance from it. The
+  centre-offset measure is removed from script 08 and `R/contiguity.R`, and
+  the "distance from the historic core" suburb rule is withdrawn. Mark:
+  centre-point methods mangle conurbations without a single centre, and
+  places that grew lopsidedly (Luton); the classification should flow from
+  variations in population density and tower or bell density alone.
+- Candidate (off): a tower in a smaller city is suburban if it is less dense
+  than its city's average AND has fewer than 12 bells at other towers within
+  1 km.
+- Welwyn is no longer a known disagreement. Mark's 1920s map shows historic
+  Welwyn and Amersham equal in size, scale and centrality; Welwyn is to
+  Welwyn Garden City as Old Amersham is to Amersham-on-the-Hill. Both were
+  St Mary's, with the same number of bells before Amersham's augmentation.
+  `known_towers.csv` updated.
+
