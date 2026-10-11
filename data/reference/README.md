@@ -60,6 +60,11 @@ class, the measures behind it, and whether the class matches the feel.
 the rules give. Change it only if your view of the place changes, never to
 match the rules: a disagreement is the useful part.
 
+The classification now splits cities and conurbations into centre and suburb
+(D-036). Keep using the simpler words above: the chapter counts "City or
+large town" as agreeing with either kind of centre, "Suburban" with either
+kind of suburb, and "Inner city" with a conurbation's centre.
+
 To add your own: append rows, one per tower, keeping the relationship short
 and impersonal. **This repository is public.** Do not add anything about
 other people, or anything you would not want published.

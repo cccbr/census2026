@@ -81,58 +81,75 @@ classify_settlement_a <- function(d, pop2, pop5, region, society, th, levels) {
 
 #' Draft B: the tower's own contiguous settlement first, then its density
 #'
-#' Place measures only. Built around the question "what sort of place are
-#' these bells in?", in three steps:
-#'   1. Historic city cores: towers inside an urban centre with many other
-#'      towers' bells close by (th$core_other_bells or more within 1 km), plus
-#'      any tower on the curated special list (Q-022) as a backstop.
-#'   2. Other towers inside an urban centre (a contiguous built-up area on the
-#'      Degree of Urbanisation grid, R/contiguity.R). In a conurbation (at
-#'      least th$conurbation_pop people): "Inner city" where inner_d is at
-#'      least th$inner_density, otherwise "Suburban". In a smaller centre:
-#'      "Suburban" where local_d is below th$suburb_density and the tower has
-#'      fewer than th$suburb_core_bells bells at other towers within 1 km
-#'      (if th$small_city_suburbs is TRUE); otherwise "City or large town".
-#'      The suburb line is one density for every city, so a city that is
-#'      sprawling throughout can be wholly suburban.
-#'   3. Other towers by local density: "Town" from th$town_density, "Village"
-#'      from th$village_density, otherwise "Small village or hamlet".
+#' Place measures only (D-028). Built around the question "what sort of
+#' place are these bells in?" (D-036):
+#'   1. Outside an urban centre (a contiguous built-up area on the Degree of
+#'      Urbanisation grid, R/contiguity.R): "Town" from th$town_density,
+#'      "Village" from th$village_density, otherwise "Small village or hamlet".
+#'   2. Inside one, a tower is CENTRAL if either holds:
+#'        - nres_ratio is at least th$centre_nres_ratio: the non-residential
+#'          share of the buildings around the church, divided by the same
+#'          share for its whole urban centre. A centre is where its town's
+#'          shops and offices are, which population density cannot show,
+#'          because town centres are short of residents;
+#'        - there are th$old_centre_towers or more frame towers within 1 km,
+#'          the tower itself included (an old centre).
+#'      If that leaves a settlement with no central tower at all, its densest
+#'      eligible tower is central, so every settlement has a centre.
+#'      Every other tower in an urban centre is a SUBURB.
+#'   3. The type names the settlement and the position: "Conurbation: centre"
+#'      or "Conurbation: suburb" in an urban centre of th$conurbation_pop or
+#'      more, "City or large town: centre" or "...: suburb" in a smaller one.
 #'
-#' Two density measures, because two questions (D-035): local_d describes the
-#' tower's own neighbourhood (500 m kernel); inner_d describes its district
-#' within a conurbation (1 km kernel).
+#' Tower clusters are a separate flag, not a type: see tower_cluster().
 #'
-#' Bells enter only as OTHER towers' bells. A tower's own bells would tie the
-#' class to its own ring size (D-028).
-#'
-#' @param centre_pop Population of the urban centre the tower is in (NA if
-#'   none).
-#' @param local_d The tower's local density (people per km2 of land).
-#' @param inner_d The tower's district density, for the inner-city line.
-#' @param other_bells Bells within 1 km at OTHER frame towers.
-#' @param listed Logical: on the special list as a society or city-core tower.
-#' @param th Named list: core_other_bells, conurbation_pop, inner_density,
-#'   suburb_density, town_density, village_density, small_city_suburbs,
-#'   suburb_core_bells.
+#' @param centre_key Identifier of the urban centre (NA if none).
+#' @param centre_pop Its population (NA if none).
+#' @param local_d The tower's local density (people per km2 of land): the
+#'   town and village lines, and the fallback centre.
+#' @param nres_ratio Non-residential share around the church divided by its
+#'   urban centre's (NA where nothing is built, treated as not central).
+#' @param towers_1km Frame towers within 1 km, the tower itself included.
+#' @param eligible Logical: may this tower be a settlement's fallback centre?
+#'   (Frame towers only, so that towers outside the frame never change the
+#'   result for those in it.)
+#' @param th Named list: conurbation_pop, centre_nres_ratio, old_centre_towers,
+#'   town_density, village_density.
 #' @param levels Factor levels for the result.
-classify_settlement_b <- function(centre_pop, local_d, inner_d, other_bells,
-                                  listed, th, levels) {
+classify_settlement_b <- function(centre_key, centre_pop, local_d, nres_ratio,
+                                  towers_1km, eligible, th, levels) {
   in_centre <- !is.na(centre_pop)
+  eligible <- rep_len(eligible, length(centre_pop))
   conurb <- in_centre & centre_pop >= th$conurbation_pop
-  core <- listed | (in_centre & other_bells >= th$core_other_bells)
-  small_city_suburb <- isTRUE(th$small_city_suburbs) & in_centre & !conurb &
-    local_d < th$suburb_density & other_bells < th$suburb_core_bells
+  central <- in_centre & (dplyr::coalesce(nres_ratio >= th$centre_nres_ratio, FALSE) |
+                            towers_1km >= th$old_centre_towers)
+  # Every settlement has a centre: where none qualifies, its densest eligible
+  # tower is central.
+  key <- ifelse(in_centre, centre_key, "")
+  has_central <- as.logical(stats::ave(central & eligible, key, FUN = any))
+  densest <- local_d == stats::ave(ifelse(eligible, local_d, -Inf), key, FUN = max)
+  central <- central | (in_centre & eligible & densest & !has_central)
   type <- dplyr::case_when(
-    core                                  ~ "Historic city core",
-    conurb & inner_d >= th$inner_density  ~ "Inner city",
-    conurb                                ~ "Suburban",
-    small_city_suburb                     ~ "Suburban",
-    in_centre                             ~ "City or large town",
-    local_d >= th$town_density            ~ "Town",
-    local_d >= th$village_density         ~ "Village",
-    TRUE                                  ~ "Small village or hamlet"
+    conurb & central               ~ "Conurbation: centre",
+    conurb                         ~ "Conurbation: suburb",
+    in_centre & central            ~ "City or large town: centre",
+    in_centre                      ~ "City or large town: suburb",
+    local_d >= th$town_density     ~ "Town",
+    local_d >= th$village_density  ~ "Village",
+    TRUE                           ~ "Small village or hamlet"
   )
   factor(type, levels = levels)
+}
+
+#' Tower clusters: many towers within walking distance of each other
+#'
+#' A flag, not a type (D-036): th$cluster_towers or more frame towers within
+#' 1 km, the tower itself included, or on the special list as a society tower
+#' (Q-022) as a backstop. Counting towers, not bells, keeps ring size out
+#' (D-028), and counting the tower itself means towers all within 1 km of
+#' each other share one count, so a cluster is never split by its own rings.
+tower_cluster <- function(towers_1km, listed, th) {
+  listed | towers_1km >= th$cluster_towers
 }
 
 #' Turn each leaf of an rpart tree into a readable rule

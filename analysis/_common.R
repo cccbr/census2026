@@ -24,23 +24,19 @@ MULTI_RING_BELLS <- "max"                   # Q-020, open
 # empty.
 #   DENSITY_VAR: used to study ring size against density (2 km kernel).
 #   LOCAL_VAR:   the tower's own neighbourhood: people per km2 of LAND in
-#                the 500 m kernel. Used for the town, village and small-city
-#                suburb lines (D-035).
-#   INNER_VAR:   the tower's district within a conurbation: people per km2
-#                of LAND in the 1 km kernel. Used for the inner-city line
-#                only, because "inner city" is a question about a district,
-#                and the tighter kernels made it patchy (D-035).
+#                the 500 m kernel. The town and village lines (D-035).
+#   NRES_VAR:    the non-residential share of the built-up surface in the
+#                500 m kernel: shops, offices and the like. Tells a town's
+#                centre from its suburbs (D-036).
 #   TIGHT_VAR:   the 250 m kernel. The scale at which ring size tracks
 #                density best; used only in the side-quest chapter on what
 #                the bells remember, never to classify (D-035).
-#   Kernels throughout, except the historic-city-core test, where a crisp
-#   1 km circle suits a compact cluster of towers. Densities, not counts, so
-#   the lines compare with the Degree of Urbanisation's 300 and 1,500 per
-#   km2 (Mark, 2026-10-11).
+#   Densities, not counts, so the lines compare with the Degree of
+#   Urbanisation's 300 and 1,500 per km2 (Mark, 2026-10-11).
 #   REGION_VAR:  the wider region (8 km kernel).
 DENSITY_VAR   <- "density_land_k2km"
 LOCAL_VAR     <- "density_land_k500m"
-INNER_VAR     <- "density_land_k1km"
+NRES_VAR      <- "nres_share_k500m"
 TIGHT_VAR     <- "density_land_k250m"
 REGION_VAR    <- "density_land_k8km"
 DRAFT_A_LOCAL_VAR <- "density_land_r1km"   # Draft A as it was, for comparison
@@ -59,37 +55,30 @@ DRAFT_A <- list(town_density = 300, town_pop = 5000,
                 city_density = 1500, city_pop = 50000,
                 region_density = 1000)
 
-# Draft B thresholds: the working draft. See R/settlement.R. Every density
-# is people per km2 of LAND: the inner-city line in the 1 km kernel
-# (INNER_VAR), all others in the 500 m kernel (LOCAL_VAR). Calibrated
-# 2026-10-11 on the real tower context table (D-035).
-#   core_other_bells: a tower inside an urban centre with at least this many
-#     bells at OTHER frame towers within 1 km is in a historic city core
-#     (D-031). 30 is about four rings of eight.
+# Draft B thresholds: the working draft (D-036). See R/settlement.R.
 #   conurbation_pop: an urban centre this size or larger is a conurbation.
 #     Set in a gap in UK centre sizes (Nottingham 636k | Leicester 513k), so
 #     small data changes cannot move a city across it; keeps Bristol in.
-#   inner_density: the inner-city line within a conurbation, on the 1 km
-#     kernel. 4,000 keeps an inner city in every UK conurbation, as 1988
-#     had, while removing most of the 250 m kernel's patchiness.
-#   suburb_density: in a smaller city, a tower below this density (500 m
-#     kernel) is suburban, the same line for every city, so a city that
-#     sprawls throughout can be wholly suburban (Mark, 2026-10-11). 3,000
-#     brings Large City close to 1988's share.
-#   suburb_core_bells: ...unless it has this many bells at other towers
-#     within 1 km. Keeps old centres with few residents (Gloucester's) in
-#     the city.
+#   centre_nres_ratio: inside an urban centre, a tower is central if the
+#     non-residential share of the buildings around it is at least this
+#     multiple of its urban centre's own share. 1: at least as commercial as
+#     its town as a whole. No other line is needed inside urban centres, and
+#     London needs no exception: its average share is not inflated the way
+#     its density is (D-036).
+#   old_centre_towers: inside an urban centre, a tower with this many frame
+#     towers within 1 km (itself included) is central whatever the buildings
+#     round it. Keeps old centres of churches (Gloucester's) central.
+#   cluster_towers: the tower-cluster flag. 5 or more frame towers within
+#     1 km, itself included: towers close enough for one band to ring several
+#     in a morning (Mark, 2026-10-11).
 #   town_density: a town outside an urban centre. 420 is the best match to
 #     1988's share of towns.
 #   village_density: below this, a small village or hamlet. 200 scales the
 #     earlier 300 (the Degree of Urbanisation's cluster density, used on the
 #     250 m kernel) as the town line scaled, keeping about the same number
 #     of small villages and hamlets.
-#   small_city_suburbs: TRUE to apply the suburb rule in smaller cities.
-DRAFT_B <- list(core_other_bells = 30, conurbation_pop = 575000,
-                inner_density = 4000, suburb_density = 3000,
-                town_density = 420, village_density = 200,
-                small_city_suburbs = TRUE, suburb_core_bells = 12)
+DRAFT_B <- list(conurbation_pop = 575000, centre_nres_ratio = 1, old_centre_towers = 3,
+                cluster_towers = 5, town_density = 420, village_density = 200)
 
 # Special-list categories treated as "society or city-core" towers (Q-022).
 SOCIETY_CATEGORIES <- c("society_steeple_keeper", "city_of_london_other",
@@ -112,11 +101,11 @@ PAL_SMOD <- c("Very low density rural"   = "#86b6ef",
               "Urban centre"             = "#0d366b",
               "Water"                    = "#9a9a9a")
 TYPE_LEVELS <- c("Small village or hamlet", "Village", "Town",
-                 "City or large town", "Suburban", "Inner city",
-                 "Historic city core")
-# Historic city core in near-black, so it stands apart from the warm town
-# and city colours on maps.
-PAL_TYPE <- stats::setNames(c(PAL_CAT[c(3, 1, 4, 2, 5, 7)], "#222222"), TYPE_LEVELS)
+                 "City or large town: suburb", "City or large town: centre",
+                 "Conurbation: suburb", "Conurbation: centre")
+# Each settlement's suburb is a lighter shade of its centre's colour.
+PAL_TYPE <- stats::setNames(c(PAL_CAT[c(3, 1, 4)], "#f5a37a", PAL_CAT[2],
+                              "#a99be8", PAL_CAT[7]), TYPE_LEVELS)
 TYPE_LEVELS_A <- c("Village", "Village in a built-up region",
                    "Town", "Town in a built-up region",
                    "City or large town", "City or large town in a conurbation",
@@ -149,7 +138,8 @@ known     <- readr::read_csv(
 # The new measures from script 08 (2026-10-10). Stop early, with a clear
 # message, if the context table predates them.
 needed_cols <- c("density_land_k250m", "density_land_k500m", "density_land_r500m",
-                 "centre_pop", "urban_pop", "rural_cluster_pop", "centre_dist_km")
+                 "centre_pop", "urban_pop", "rural_cluster_pop", "centre_dist_km",
+                 "nres_share_k500m", "centre_nres_share")
 missing_cols <- setdiff(needed_cols, names(context))
 if (length(missing_cols) > 0) {
   stop("The tower context table is missing ", paste(missing_cols, collapse = ", "),
@@ -186,6 +176,9 @@ towers <- frame |>
     # Bells within 1 km at OTHER frame towers. bells_r1km counts frame towers
     # only, so a frame tower's own bells are subtracted; others never counted.
     other_bells_1km = .data$bells_r1km - ifelse(.data$in_frame, .data$bells, 0),
+    # Frame towers within 1 km, the tower itself included. towers_r1km counts
+    # frame towers only, so a tower outside the frame adds itself.
+    towers_1km = .data$towers_r1km + ifelse(.data$in_frame, 0, 1),
     smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
     british_isles = .data$country %in% BRITISH_ISLES,
     # The UK: Great Britain plus the six counties of Northern Ireland (Dove
@@ -221,9 +214,33 @@ towers <- towers |>
     # and its average density (people per km2 of its 1 km cells).
     centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
                         paste(round(.data$centre_pop), .data$centre_km2)),
-    centre_density = .data$centre_pop / .data$centre_km2,
-    type = classify_settlement_b(.data$centre_pop, .data[[LOCAL_VAR]], .data[[INNER_VAR]],
-                                 .data$other_bells_1km, .data$society, DRAFT_B, TYPE_LEVELS)
+    centre_density = .data$centre_pop / .data$centre_km2
+  )
+
+# How Draft B's types map onto 1988's five. Tower clusters are mapped
+# separately, to "Large City" (see type_1988).
+crosswalk_1988 <- c(
+  "Small village or hamlet"    = "Village",
+  "Village"                    = "Village",
+  "Town"                       = "Town",
+  "City or large town: suburb" = "Suburban",
+  "City or large town: centre" = "Large City",
+  "Conurbation: suburb"        = "Suburban",
+  "Conurbation: centre"        = "Inner City"
+)
+
+towers <- towers |>
+  dplyr::mutate(
+    # The non-residential share round the church against its whole urban
+    # centre's: above 1, more commercial than its town as a whole.
+    nres_ratio = .data[[NRES_VAR]] / .data$centre_nres_share,
+    type = classify_settlement_b(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
+                                 .data$nres_ratio, .data$towers_1km, .data$in_frame,
+                                 DRAFT_B, TYPE_LEVELS),
+    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_B),
+    # 1988's five types. Tower clusters go to "Large City": 1988's type of the
+    # great city-centre churches, with the most ringers per bell.
+    type_1988 = ifelse(.data$tower_cluster, "Large City", unname(crosswalk_1988[as.character(.data$type)]))
   )
 bi <- dplyr::filter(towers, .data$british_isles)
 frame_towers <- dplyr::filter(towers, .data$in_frame)
@@ -231,14 +248,3 @@ type_share <- prop.table(table(frame_towers$type))
 
 # 1988 drew from towers with five or more bells, in the British Isles.
 comparable_1988 <- dplyr::filter(frame_towers, .data$british_isles, .data$bells >= 5)
-
-# How Draft B's types map onto 1988's five.
-crosswalk_1988 <- c(
-  "Small village or hamlet"    = "Village",
-  "Village"                    = "Village",
-  "Town"                       = "Town",
-  "City or large town"         = "Large City",
-  "Suburban"                   = "Suburban",
-  "Inner city"                 = "Inner City",
-  "Historic city core"         = "Large City"
-)

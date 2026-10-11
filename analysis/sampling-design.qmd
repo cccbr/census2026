@@ -40,8 +40,7 @@ villages <- c("Village", "Small village or hamlet")
 
 pop <- frame_towers |>
   dplyr::mutate(
-    ring_class = droplevels(.data$ring_class),
-    type_1988 = unname(crosswalk_1988[as.character(.data$type)])
+    ring_class = droplevels(.data$ring_class)
   ) |>
   dplyr::left_join(rates_1988, by = "type_1988") |>
   dplyr::mutate(
@@ -95,11 +94,11 @@ estimate <- function(o, s, pi) {
     village_ringers  = sum(w * o$ringers[s] * in_village[s]))
 }
 
-# Historic city cores are one stratum whatever their ring size: shared bands
-# make ring size a poor guide there.
-pop$ring_stratum <- ifelse(pop$type == "Historic city core", "all",
-                           as.character(pop$ring_class))
-strata <- interaction(pop$type, pop$ring_stratum, drop = TRUE)
+# Tower clusters are one stratum whatever their type and ring size: shared
+# bands make ring size a poor guide there (D-036).
+pop$stratum_type <- ifelse(pop$tower_cluster, "Tower cluster", as.character(pop$type))
+pop$ring_stratum <- ifelse(pop$tower_cluster, "all", as.character(pop$ring_class))
+strata <- interaction(pop$stratum_type, pop$ring_stratum, drop = TRUE)
 Nh <- table(strata)
 nh <- pmin(Nh, pmax(MIN_PER_CELL, round(n * Nh / N)))
 pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
@@ -107,7 +106,7 @@ pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
 # Sort order for the systematic design: type, then ring class, then density,
 # reversing direction in alternate groups ("serpentine") so neighbours in the
 # list stay similar across group boundaries.
-grp <- as.integer(interaction(pop$type, pop$ring_stratum, lex.order = TRUE, drop = TRUE))
+grp <- as.integer(interaction(pop$stratum_type, pop$ring_stratum, lex.order = TRUE, drop = TRUE))
 sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]] + 1))
 
 # Place measures plus ring size. "Growth since the bells" is left out: it is
@@ -164,9 +163,9 @@ design_rank <- perf |>
   dplyr::arrange(.data$mean_rel)
 robust_design <- design_rank$design[[1]]
 
-# Stratum cells: type x ring size (city cores as one stratum).
+# Stratum cells: type x ring size (tower clusters as one stratum).
 cells <- pop |>
-  dplyr::count(.data$type, ring_class = factor(.data$ring_stratum,
+  dplyr::count(type = factor(.data$stratum_type, levels = c(TYPE_LEVELS, "Tower cluster")), ring_class = factor(.data$ring_stratum,
                                                levels = c(levels(pop$ring_class), "all"))) |>
   dplyr::mutate(expected = .data$n / N * N_CHASED)
 n_cells_small <- sum(cells$expected < 10)
@@ -187,9 +186,9 @@ and ring size, with proportional allocation:
 - Strata are the seven place types from *Choosing a classification*,
   crossed with ring size (4–5, 6–7, 8–9, 10+).
 - Cells expecting fewer than about 10 chased towers are merged with a
-  neighbour of the same ring size (inner city with suburban, for example).
-- The historic city cores form one stratum, whatever their ring size,
-  because their shared bands make ring size a poor guide there.
+  neighbour of the same ring size (a centre with its suburb, for example).
+- Towers in tower clusters form one stratum, whatever their type and ring
+  size, because their shared bands make ring size a poor guide there.
 - Results are reported by place type crossed with ring size, which maps onto
   1988's tables.
 
@@ -374,10 +373,9 @@ cells |>
   knitr::kable(caption = paste0("Frame towers by type and ring size (expected chased towers at n = ", fmt(N_CHASED), ")"))
 ```
 
-The small cells are mostly the urban types with small rings, and the
-historic city cores. They can be merged with their neighbours (inner city
-with suburban, for example), or drawn as one stratum regardless of ring
-size.
+The small cells are mostly the urban types with small rings. They can be
+merged with their neighbours (a centre with its suburb, for example), or
+drawn as one stratum regardless of ring size, as the tower clusters are.
 
 ## Practical differences the simulation does not show
 

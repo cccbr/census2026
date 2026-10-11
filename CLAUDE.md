@@ -449,9 +449,12 @@ sample (Q-023, needed before the draw):
   `settlement-classes.qmd` (1988 shares, Draft A set aside, Draft B,
   known-towers sense check) and `sampling-design.qmd` (design simulation).
 - The classification is place-only (D-028), and its scales are chosen to
-  describe places today, never because they fit ring size (D-035): the
-  500 m kernel for town, village and small-city suburb lines, the 1 km
-  kernel for the inner-city line. Draft B is the working classification.
+  describe places today, never because they fit ring size (D-035). Draft B
+  (D-036): towns and villages by people per km² of land in the 500 m kernel;
+  inside urban centres, centre or suburb by the non-residential share of
+  buildings against the urban centre's own; neutral type names; tower
+  clusters (5+ towers within 1 km) a flag. Names must not grade places:
+  people will look up their own town (Mark's father's warning).
 - The Gloucester & Bristol Association's 2025 tower register (ringers per
   tower, from its treasurer) is imported by `scripts/11_import_gb_register.R`.
   Its counts are third-party data and stay in `data/raw` and `data/curated`,

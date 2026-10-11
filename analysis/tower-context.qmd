@@ -68,11 +68,13 @@ tested with the other analysis volunteers.*
 
 **What this chapter establishes, and what it feeds into the classification.**
 
-- **Two scales describe a tower's surroundings for the classification**
-  (D-035). A 500 m kernel describes its own neighbourhood; a 1 km kernel
-  describes its district within a conurbation. Both are chosen to describe
-  places as they are today. *Used for:* the town, village and suburb lines
-  (500 m) and the inner-city line (1 km), in *Choosing a classification*.
+- **A 500 m kernel describes a tower's own neighbourhood** (D-035), chosen
+  to describe places as they are today. *Used for:* the town and village
+  lines in *Choosing a classification*.
+- **What is built round a church tells a centre from a suburb** (D-036).
+  Town centres are short of residents, so population density cannot find
+  them; the non-residential share of buildings can. *Used for:* centre or
+  suburb, inside a city or conurbation.
 - **Cities need the settlement's own edge, not a radius.** Continuous
   built-up areas, traced with the international Degree of Urbanisation's
   rules, separate a free-standing city from a suburb where distance measures
@@ -147,6 +149,12 @@ Script 08 describes the area around each tower in three ways.
   in, traced on the international Degree of Urbanisation's 1 km grid with
   that scheme's own rules, and the number of people living in it. Unlike the
   kernels and circles, this follows the settlement's own edge.
+- **Buildings** (added 11 October, D-036). The built-up surface within the
+  250 m, 500 m and 1 km kernels, and its non-residential part (shops,
+  offices, schools, hospitals, industry), from the Global Human Settlement
+  Layer, with the same figures for the tower's whole urban centre. Named
+  `built_km2_<m>`, `nres_km2_<m>` and `nres_share_<m>`, the non-residential
+  share. It measures ground covered, not floor space.
 
 The kernels and circles count three things: **people** (from the EU's Global
 Human Settlement Layer), and **towers** and **bells** (from the sampling

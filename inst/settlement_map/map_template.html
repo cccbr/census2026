@@ -49,6 +49,7 @@ a{color:var(--link)}
   <div class="matches" id="matches"></div>
   <p class="keyhead">Settlement type (tick to show)</p>
   <ul class="legend" id="legend"></ul>
+  <p class="keyhead">Bold outline: tower cluster</p>
   <p class="keyhead">Bells</p>
   <ul class="shapes" id="shapes"></ul>
   <ul class="legend"><li><label><input type="checkbox" id="ur" checked> Show unringable rings (faded)</label><span class="count" id="urcount"></span></li></ul>
@@ -63,14 +64,19 @@ be seen. Each is given the type its own place would have, by the same rule,
 but none affects any other tower's type. Click a dot for the
     measures behind its type. The types are provisional: see the analysis chapter
     <em>Choosing a classification</em>.</p>
-    <p>Densities are people per km&sup2; of land, with nearer people counting
-    more: around the church, the weight halves every 500 m; for the district,
-    used only for the inner-city line, every 1 km. An urban centre is a continuous built-up area of
-    50,000 or more, as traced by the international Degree of Urbanisation.</p>
+    <p>Outside cities, towns and villages are set by the density of people
+    around the church: people per km&sup2; of land, nearer people counting more
+    (the weight halves every 500 m). Inside a continuous built-up area of 50,000
+    or more, a church is in a <em>centre</em> if the buildings round it are at
+    least as commercial as its town's as a whole (the non-residential share of
+    the built-up surface), or if it stands among three or more towers;
+    otherwise it is in a <em>suburb</em>. Every town has at least one centre.
+    A <strong>bold outline</strong> marks a tower cluster: five or more towers
+    within 1 km, close enough for one band to ring several.</p>
     <p>Tower data from <a href="https://dove.cccbr.org.uk">Dove's Guide for Church Bell
     Ringers</a>, &copy; the Central Council of Church Bell Ringers, licensed
     <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>;
-    modified. Population: GHSL, &copy; European Union. Map tiles &copy;
+    modified. Population and buildings: GHSL, &copy; European Union. Map tiles &copy;
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.
     This page contains no personal data.</p>
     <p id="gen"></p>
@@ -165,18 +171,21 @@ but none affects any other tower's type. Click a dot for the
     var m = new ShapeMarker([r[F.lat], r[F.lon]], {
       radius: R * sh.scale,          // used for clicks and hover
       sides: sh.sides, scale: sh.scale,
-      color: ur ? "#00000040" : "#00000088", weight: 0.7,
+      color: r[F.cl] === 1 ? "#000000" : (ur ? "#00000040" : "#00000088"),
+      weight: r[F.cl] === 1 ? 2.2 : 0.7,
       fillColor: D.colours[t], fillOpacity: ur ? 0.3 : 0.85
     });
     m.bindPopup(function () {
       var rows = [
-        ["Type", D.types[t] + " <span style=\"color:#5f6368\">(1988: " + D.types1988[t] + ")</span>"],
+        ["Type", D.types[t] + " <span style=\"color:#5f6368\">(1988: " + (r[F.cl] === 1 ? "Large City" : D.types1988[t]) + ")</span>"],
         ["Ringable", ur ? "No: outside the frame, shown faded" : ""],
         ["Bells", r[F.bells]],
         ["Density around the church (500 m kernel)", fmt(r[F.density]) + " per km&sup2;"],
-        ["Density of the district (1 km kernel)", fmt(r[F.district]) + " per km&sup2;"],
+        ["Non-residential share of buildings round it", r[F.nres] === null ? "none built" : Math.round(100 * r[F.nres]) + "%" +
+          (r[F.nres_ratio] === null ? "" : " <span style=\"color:#5f6368\">(" + r[F.nres_ratio].toFixed(2) + " &times; its built-up area's)</span>")],
+        ["Tower cluster", r[F.cl] === 1 ? "Yes: " + r[F.towers_1km] + " towers within 1 km" : ""],
         ["Urban centre", r[F.centre] === null ? "none" : fmt(D.centres[r[F.centre]][0]) + " people"],
-        ["Bells at other towers within 1 km", r[F.other_bells]],
+        ["Towers within 1 km (itself included)", r[F.towers_1km]],
         ["Wider area (8 km kernel)", fmt(r[F.region]) + " per km&sup2;"]
       ];
       if (r[F.feels]) rows.push(["Feels like (known tower)", esc(r[F.feels])]);

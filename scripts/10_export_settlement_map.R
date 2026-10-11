@@ -32,9 +32,10 @@ type_colours <- unname(PAL_TYPE[TYPE_LEVELS])
 
 # Unringable rings: one per tower, skipping the few towers that also have a
 # ringable ring (they are on the map already). Measures come from the same
-# context table. Other towers' bells within 1 km: bells_r1km counts frame
-# towers only, and an unringable tower is never one, so nothing is
-# subtracted.
+# context table, and the same rule gives each its type. Frame towers within
+# 1 km: towers_r1km counts frame towers only, so an unringable ring is never
+# counted, by itself or by anyone else. An unringable ring is never a
+# settlement's fallback centre (eligible = FALSE).
 unringable <- frame |>
   dplyr::filter(!.data$is_ringable, !.data$tower_id %in% towers$tower_id) |>
   dplyr::summarise(bells = max(.data$bells), display = dplyr::first(.data$display),
@@ -48,11 +49,14 @@ unringable <- frame |>
   ) |>
   dplyr::mutate(
     society = !is.na(.data$special) & .data$special %in% SOCIETY_CATEGORIES,
-    other_bells_1km = .data$bells_r1km,
+    towers_1km = .data$towers_r1km,
     centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
                         paste(round(.data$centre_pop), .data$centre_km2)),
-    type = classify_settlement_b(.data$centre_pop, .data[[LOCAL_VAR]], .data[[INNER_VAR]],
-                                 .data$other_bells_1km, .data$society, DRAFT_B, TYPE_LEVELS)
+    nres_ratio = .data[[NRES_VAR]] / .data$centre_nres_share,
+    type = classify_settlement_b(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
+                                 .data$nres_ratio, .data$towers_1km, FALSE,
+                                 DRAFT_B, TYPE_LEVELS),
+    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_B)
   )
 n_unringable_no_context <- sum(!frame$is_ringable) - nrow(unringable) -
   sum(!frame$is_ringable & frame$tower_id %in% towers$tower_id)
@@ -80,9 +84,11 @@ rows <- shown |>
     bells = .data$bells,
     type  = as.integer(.data$type) - 1L,            # 0-based for JavaScript
     density = signif(.data[[LOCAL_VAR]], 3),         # 500 m kernel
-    district = signif(.data[[INNER_VAR]], 3),        # 1 km kernel
+    nres  = round(.data[[NRES_VAR]], 3),             # non-residential share
+    nres_ratio = round(.data$nres_ratio, 2),         # ... against its built-up area's
     centre = .data$centre,
-    other_bells = .data$other_bells_1km,
+    towers_1km = round(.data$towers_1km),
+    cl    = as.integer(.data$tower_cluster),         # 1 = in a tower cluster
     region = signif(.data[[REGION_VAR]], 3),
     feels = .data$feels_like,
     ur    = .data$ur                                # 1 = unringable, shown faded

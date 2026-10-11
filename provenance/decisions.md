@@ -1048,3 +1048,61 @@ Petworth) could go either way.
 **Follow-up.** Use a wide density (2 km or 4 km kernel) to sort the draw
 within strata, so the sample spreads across today's catchments without
 bending the type labels: proposed, not decided.
+
+## D-036 — Centres found by what is built there; tower clusters a flag; neutral names
+
+**2026-10-11 · Provisional (Mark)** · amends D-031, D-034, D-035
+
+**Context.** Mark's father, shown the map, foresaw that people would look up
+their own town and feel slighted: by a prestigious "historic city core"
+their city was denied, or by their central church being called a suburb.
+Testing then showed that population density cannot find town centres:
+centres are short of residents, so density made 28 UK cathedrals, minsters
+and big rings into suburbs (Wolverhampton S Peter, Halifax and Rotherham
+Minsters, Hull Minster among them), and London's average density was so high
+it needed a rule of its own.
+
+**Decision.**
+- Inside an urban centre, a tower is in a **centre** if the non-residential
+  share of the built-up surface within the 500 m kernel round it is at least
+  its urban centre's own share (GHS-BUILT-S and its NRES part, R2023A,
+  2020), or if it has 3 or more frame towers within 1 km, itself included.
+  Where that leaves an urban centre with no centre, its most densely
+  populated frame tower is its centre. Every other tower is in a **suburb**.
+- No density line inside urban centres; no London exception. The inner-city
+  line (4,000, D-035) and the small-city suburb line (3,000) are withdrawn,
+  as is the 1 km kernel in the classification.
+- Types renamed, neutrally: City or large town: centre / suburb;
+  Conurbation: centre / suburb. "Inner city" and "Historic city core" go.
+- **Tower cluster** is a flag on top of the type, not a type: 5 or more frame
+  towers within 1 km, the tower itself included, or on the special list.
+  Counting towers keeps ring size out (D-028); counting the tower itself
+  keeps a cluster whole (bells at other towers had split Norwich, leaving
+  out Mancroft). Clusters are one sampling stratum and map to 1988's Large
+  City. On the map they have a bold outline.
+
+**Evidence** (real tower context table, 11 October; the chapter recomputes
+all of it). Of 34 test centres and 19 test suburbs, compared with each
+tower's own urban centre:
+
+| Measure | Centres made suburbs | Suburbs made centres |
+| --- | --- | --- |
+| People per km² of land | 19 | 3 |
+| Share of land built on | 12 | 3 |
+| Non-residential share of buildings | 5 | 6 |
+
+The six suburbs mostly sit on the line (Barnwood, Quedgeley, St Albans
+S Stephen within 2%); Dunstable has a centre of its own; Brockworth is next
+to an industrial estate. Shares of comparable towers: village 56% (1988:
+53%), town 27% (28%), large city 6% (6%), suburban 7% (11%), inner city 3%
+(2%). All 12 known towers agree.
+
+**Known weak points.** Town centres absorbed into a larger built-up area can
+fall short of its share (Stockport, Epsom, Pontefract, Leyland); an old town
+whose shopping moved (Hastings All Saints); industrial estates; the layer is
+footprint, not floor space. The fallback centre is chosen by residents, so
+it can pick a suburb where an old centre is empty.
+
+**Also.** GHS-BUILT-S total and non-residential layers fetched (script 07)
+and summed in script 08 for the 250 m, 500 m and 1 km kernels and over each
+urban centre.
