@@ -51,6 +51,7 @@ latest".
 | `07_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
 | `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
 | `09_build_widget_paste.R` | Strips comments from the two QuestionPro widgets so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | `inst/questionnaire/build/*.paste.js` | seconds |
+| `10_export_settlement_map.R` | Publishes an interactive map of the draft settlement types, for volunteers to check | `docs/settlement-map/index.html` (served by GitHub Pages) | seconds |
 
 ### What the settlement measures are
 
@@ -80,6 +81,22 @@ names; nothing else should parse them.
 
 The reasoning, and the alternatives considered, are in decisions D-026 and
 D-027 in `provenance/decisions.md`.
+
+---
+
+### The settlement map
+
+`docs/settlement-map/index.html` is an interactive map of every frame tower,
+coloured by its draft settlement type, with the measures behind each type in
+a popup. It is for the analysis volunteers to pan around and challenge. Once
+pushed, GitHub Pages serves it at `<pages site>/settlement-map/`. It is one
+self-contained file, so it also opens straight from disk.
+
+Script 10 builds it from the same code as the analysis chapters
+(`analysis/_common.R`), so the map always shows the current classification.
+Re-run script 10 after changing the classification or re-running script 08,
+then commit the page. It contains no personal data, and carries Dove's
+CC BY-SA attribution.
 
 ---
 

@@ -148,8 +148,8 @@ frame_towers |>
       paste0("Under ", fmt(DRAFT_B$village_density), " people per km² of land around the church"),
       paste0(fmt(DRAFT_B$village_density), " to ", fmt(DRAFT_B$town_density), " people per km² of land around the church"),
       paste0(fmt(DRAFT_B$town_density), "+ people per km² of land around the church, outside any city"),
-      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people"),
-      paste0("In a conurbation of ", fmt(DRAFT_B$conurbation_pop), " or more, away from its densest parts"),
+      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people, at or above its average density or among old churches"),
+      paste0("In a conurbation, away from its densest parts; or in a smaller city, below its average density"),
       paste0("In a conurbation's densest parts (", fmt(DRAFT_B$inner_density), "+ people per km² of land)"),
       paste0("In a city centre with ", fmt(DRAFT_B$core_other_bells), "+ bells at other towers within 1 km")
     )), by = "type") |>
@@ -169,9 +169,12 @@ frame_towers |>
 - The conurbation line sits in a gap between city sizes, with Bristol inside.
 - Historic city cores are found by a measure, with the special list as a
   backstop.
-- Welwyn and Amersham are both towns. Mark's 1920s map shows historic Welwyn
-  and Amersham equal in size, scale and centrality, so this is now agreement,
-  not a known disagreement.
+- Suburbs of smaller cities count as suburban: less dense than their city's
+  average, and away from its old churches.
+- The inner-city line is `r fmt(DRAFT_B$inner_density)` people per km² of
+  land, so every major conurbation has an inner city, as in 1988.
+- Aligning with 1988's five types is a high priority, given the standing of
+  their author.
 
 **Still open.**
 
@@ -179,11 +182,10 @@ frame_towers |>
    remark and inferred 1988 shares. Volunteers' known towers, recorded
    before they see the class, and Richard Heys's Gloucestershire and Bristol
    register (towers with no registered members) would test them properly.
-2. *The inner-city line* (`r fmt(DRAFT_B$inner_density)` people per km²) is
-   a density stand-in for 1988's meaning, which was partly about
-   deprivation.
-3. *Whether "Suburban" should also cover the suburbs of smaller cities*, as
-   1988's probably did (11% of towers then, against Draft B's 6%).
+2. *The inner-city line* is a density stand-in for 1988's meaning, which was
+   partly about deprivation.
+3. *Suburban is still below 1988's share* (`r pct(mean(comparable_1988$type == "Suburban"))`
+   against 11%).
 4. *The special-case list* (Q-022): now a backstop, but its society and
    university-society rows still need confirming.
 
@@ -468,8 +470,8 @@ knows and by comparison with 1988:
 | --- | --- |
 | Historic city core | In an urban centre, with at least `r fmt(DRAFT_B$core_other_bells)` bells at *other* towers within 1 km; or on the special list as a society, City of London or central London tower |
 | Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land around the church |
-| Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density |
-| City or large town | In an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
+| Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density; or in a smaller urban centre, less dense than its average and with fewer than `r fmt(DRAFT_B$suburb_core_bells)` bells at other towers within 1 km |
+| City or large town | Any other tower in an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
 | Town | Not in an urban centre, with at least `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
 | Village | `r fmt(DRAFT_B$village_density)` to `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
 | Small village or hamlet | Under `r fmt(DRAFT_B$village_density)` people per km² of land around the church |
@@ -506,12 +508,12 @@ tables below show what moving them does.
   a city across it (the table below lists the centres either side). It takes
   in London and the large metropolitan areas, which 1988 called the "major
   conurbations", and Bristol, as Mark wanted.
-- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km² of land:* set
-  so that inner-city towers and city cores together are about as common as
-  in 1988's inner city, about 2%. It gives
+- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km² of land*
+  (Mark, 11 October): at higher lines almost only London qualified, while
+  1988's inner city was in every major conurbation. It gives
   `r scales::label_percent(accuracy = 0.1)(mean(frame_towers$type == "Inner city"))`
-  inner city on its own. Still open. Density is a rough stand-in for what 1988 meant by inner city,
-  which was as much about deprivation as density.
+  of frame towers. Density is a rough stand-in for what 1988 meant by inner
+  city, which was as much about deprivation as density.
 - *Town, `r fmt(DRAFT_B$town_density)` people per km² of land:* the line
   that best matches 1988's share of towns (Mark, 11 October). It sits between
   the international cluster line (300) and urban-centre line (1,500).
@@ -551,10 +553,9 @@ ringers per bell, and the most Surprise ringing.
 **Where Draft B still differs from 1988.** Two gaps remain.
 
 - *Towns and villages.* `r if (line_88 == DRAFT_B$town_density) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " per km² would match 1988's share.")`
-- *Fewer suburbs, more cities.* 1988's "Suburban" probably included the
-  suburbs of large towns and smaller cities, which Draft B counts as part of
-  the city. A candidate rule for those suburbs is tested in *Suburbs of
-  smaller cities* below.
+- *Fewer suburbs.* Even with the suburbs of smaller cities counted, Draft B
+  has fewer suburban towers than 1988. 1988 may also have counted some
+  fringe towns as suburban.
 
 ```{r}
 #| label: tbl-types
@@ -627,15 +628,13 @@ known_b |>
   `r fmt(staines$centre_pop)`. This is the distinction Draft A could not draw.
 - **Oxford and York are cities, and the City of London towers are on the
   special list.** Both as they feel.
-- **Amersham and Welwyn are both towns, and now both feel it.** Amersham has
+- **Amersham and Welwyn are both towns, as they feel.** Amersham has
   `r fmt(amersham[[LOCAL_VAR]])` people per km² of land around the church,
   Welwyn `r fmt(welwyn[[LOCAL_VAR]])`; each sits about
   `r round(mean(c(amersham$centre_dist_km, welwyn$centre_dist_km)))` km from
-  the nearest urban centre. Mark first felt Welwyn was a village. A 1920s map
-  changed his mind: historic Welwyn and historic Amersham were equal in size,
-  scale and centrality, and "Welwyn is to WGC as Old Amersham is to
-  Amersham". Before Amersham was augmented they also had the same number of
-  bells, and both are St Mary's. The rules saw the two as twins all along.
+  the nearest urban centre. They are twins: historic towns of equal size and
+  standing, each now beside a larger, newer neighbour (Amersham-on-the-Hill,
+  Welwyn Garden City), and both St Mary's.
 
 More known towers, especially outside the South East, would show whether
 cases like these are rare or common.
@@ -724,20 +723,17 @@ the concentration of historic ringing better than a count of towers. The
 tower's own bells are left out: with them included, bells within 1 km
 correlate about 0.9 with the tower's own ring size; without them, about 0.2.
 
-### Suburbs of smaller cities: test cases
+### Suburbs of smaller cities
 
-**The question.** Draft B calls every tower in a smaller city (under
-`r fmt(DRAFT_B$conurbation_pop)` people) "City or large town". In 1988,
-"Suburban" probably also covered the suburbs of such cities: 11% of towers
-then, against Draft B's `r pct(mean(comparable_1988$type == "Suburban"))`.
-Mark's view, from Gloucester and Cheltenham: the eights out at the edges
+**Why.** In 1988, "Suburban" probably also covered the suburbs of smaller
+cities (under `r fmt(DRAFT_B$conurbation_pop)` people). Mark's view, from Gloucester and Cheltenham: the eights out at the edges
 make sense as suburban, in the orbit of the city as villages are in the orbit
 of a conurbation. His prior, not yet tested: the more ambitious ringers cross
 between city and suburb bands, while less experienced members keep to their
 suburb. The census's own question on where people rang in census week
 (D-030) could test that.
 
-**A candidate rule (not yet adopted).** In a smaller city, a tower is
+**The rule** (adopted, Mark, 11 October). In a smaller city, a tower is
 suburban if both hold:
 
 - it is less dense than its city's average (people per km² of land around
@@ -768,35 +764,36 @@ suburb_test <- frame_towers |>
   dplyr::mutate(place = sub(",.*$", "", .data$display),
                 place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place)) |>
   dplyr::filter(.data$place %in% test_places)
-suburb_test$candidate <- as.character(reclass(suburb_test, small_city_suburbs = TRUE))
+suburb_test$without <- as.character(reclass(suburb_test, small_city_suburbs = FALSE))
 suburb_test |>
   dplyr::arrange(.data$centre_pop, dplyr::desc(.data[[LOCAL_VAR]])) |>
   dplyr::transmute(`urban centre (people)` = fmt(.data$centre_pop), tower = .data$display,
                    `density around the church` = fmt(.data[[LOCAL_VAR]]),
                    `city average density` = fmt(.data$centre_density),
                    `bells at other towers within 1 km` = .data$other_bells_1km,
-                   `Draft B now` = as.character(.data$type),
-                   `with the candidate rule` = .data$candidate) |>
+                   `without the suburb rule` = .data$without,
+                   `Draft B` = as.character(.data$type)) |>
   knitr::kable(caption = "Test cases: towers in some smaller cities (densities in people per km²)")
 ```
 
 ```{r}
 #| label: tbl-suburb-effect
-with_sub <- reclass(frame_towers, small_city_suburbs = TRUE)
-with_sub_88 <- reclass(comparable_1988, small_city_suburbs = TRUE)
+with_sub <- frame_towers$type
+without_sub <- reclass(frame_towers, small_city_suburbs = FALSE)
+with_sub_88 <- comparable_1988$type
 in_small_city <- !is.na(frame_towers$centre_pop) & frame_towers$centre_pop < DRAFT_B$conurbation_pop
 tibble::tibble(
   type = TYPE_LEVELS,
-  `Draft B now` = as.numeric(table(frame_towers$type)),
-  `with the candidate rule` = as.numeric(table(with_sub))
+  `without the suburb rule` = as.numeric(table(without_sub)),
+  `Draft B` = as.numeric(table(with_sub))
 ) |>
-  knitr::kable(caption = "Frame towers per type, with and without the candidate rule")
+  knitr::kable(caption = "Frame towers per type, with and without the suburb rule")
 ```
 
-**What it would do.** `r sum(with_sub == "Suburban") - sum(frame_towers$type == "Suburban")`
-frame towers would move from "City or large town" to "Suburban". On
-comparable towers, Suburban would rise to
-`r pct(mean(with_sub_88 == "Suburban"))`, against 1988's 11%. Among towers
+**What it does.** `r sum(with_sub == "Suburban") - sum(without_sub == "Suburban")`
+frame towers move from "City or large town" to "Suburban". On comparable
+towers, Suburban rises to `r pct(mean(with_sub_88 == "Suburban"))`, against
+1988's 11%. Among towers
 in smaller cities, rings of 8 or more are
 `r pct(mean(frame_towers$bells[in_small_city & with_sub == "City or large town"] >= 8))`
 in the city proper and

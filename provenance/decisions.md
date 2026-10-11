@@ -970,3 +970,22 @@ default (`DRAFT_B$small_city_suburbs`), with test cases in the chapter.
   St Mary's, with the same number of bells before Amersham's augmentation.
   `known_towers.csv` updated.
 
+## D-034 — Suburbs of smaller cities adopted; inner-city line 5,000; 1988 alignment a priority
+
+**2026-10-11 · Provisional (Mark)** · amends D-033
+
+**Decision.**
+- The suburbs rule for smaller cities is adopted: a tower in an urban centre
+  under 575,000 people is suburban if it is less dense than its city's
+  average and has fewer than 12 bells at other towers within 1 km.
+- The inner-city line is 5,000 people per km² of land (250 m kernel). At
+  8,000 almost only London qualified; 1988's inner city was in every major
+  conurbation.
+- Aligning with 1988's five types is a high priority, given the standing of
+  their author, Ron Johnston. On a trial run Draft B's shares of comparable
+  towers are: inner city and city cores 3% (1988: 2%), suburban 7% (11%),
+  large city 7% (6%), town 28% (28%), village 56% (53%).
+
+**Also.** An interactive map of the types (`scripts/10_export_settlement_map.R`,
+`docs/settlement-map/`) for the volunteers to check, served by GitHub Pages.
+

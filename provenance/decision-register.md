@@ -46,6 +46,7 @@ details still to settle) · **Open** (not decided) · **Superseded**.
 | D-031 | Historic city core is a place type: in an urban centre with 30+ bells at other towers within 1 km, or on the special list (now a backstop) | Provisional |
 | D-032 | Town and village lines on the 250 m kernel (475 and 175), not the 1 km circle; city-core test keeps its circle | Provisional |
 | D-033 | Draft B lines are land densities in the 250 m kernel (village 300, town 600, inner city 8,000 per km²); no centre-point methods; small-city suburbs a candidate only; Welwyn agrees | Provisional |
+| D-034 | Small-city suburbs adopted; inner-city line 5,000 per km²; aligning with 1988's types a high priority; settlement map published via Pages | Provisional |
 
 Superseded: D-004 → D-017 · D-005 → D-019 · D-008 → D-018.
 
