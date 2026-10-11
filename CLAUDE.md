@@ -446,15 +446,23 @@ sample (Q-023, needed before the draw):
   `analysis/_common.R`: `tower-context.qmd` (the measures and their
   structure), `bells-remember.qmd` (side quest: ring size against the
   measures, scales, decision trees, frontier model, walking-world idea),
-  `settlement-classes.qmd` (1988 shares, Draft A set aside, Draft B,
+  `settlement-classes.qmd` (1988 shares, Drafts A and B set aside, Draft C,
   known-towers sense check) and `sampling-design.qmd` (design simulation).
 - The classification is place-only (D-028), and its scales are chosen to
-  describe places today, never because they fit ring size (D-035). Draft B
-  (D-036): towns and villages by people per km² of land in the 500 m kernel;
-  inside urban centres, centre or suburb by the non-residential share of
-  buildings against the urban centre's own; neutral type names; tower
-  clusters (5+ towers within 1 km) a flag. Names must not grade places:
-  people will look up their own town (Mark's father's warning).
+  describe places today, never because they fit ring size (D-035). Draft C
+  (D-037): towns and villages by people per km² of land in the 250 m kernel
+  (the walkable population; town 600, village 200); inside urban centres, a
+  centre if within 250 m of a CDRC retail centre of District Centre size or
+  larger, or among 3+ towers (abroad, the non-residential share of buildings
+  against the urban centre's own, D-036); neutral type names; tower
+  clusters (5+ towers within 1 km) a flag. `beyond_walk` (density between
+  the 250 m and 2 km kernels) is a measure, not a type. Names must not
+  grade places: people will look up their own town (Mark's father's
+  warning). Draft B is kept in the chapter only as the account of where it
+  ran aground.
+- Script 12 builds `tower_retail_dove_2026-09-19.parquet` from the CDRC
+  Retail Centre Boundaries (snapshot `cdrc_retail_2026-10-11`, Open
+  Government Licence; attribution in the map footer). `_common.R` needs it.
 - The Gloucester & Bristol Association's 2025 tower register (ringers per
   tower, from its treasurer) is imported by `scripts/11_import_gb_register.R`.
   Its counts are third-party data and stay in `data/raw` and `data/curated`,

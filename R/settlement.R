@@ -79,19 +79,22 @@ classify_settlement_a <- function(d, pop2, pop5, region, society, th, levels) {
   factor(type, levels = levels)
 }
 
-#' Draft B: the tower's own contiguous settlement first, then its density
+#' Draft C: the settlement the tower stands in, its walkable population, and
+#' whether it is on a high street
 #'
 #' Place measures only (D-028). Built around the question "what sort of
-#' place are these bells in?" (D-036):
+#' place are these bells in?" (D-036, D-037):
 #'   1. Outside an urban centre (a contiguous built-up area on the Degree of
-#'      Urbanisation grid, R/contiguity.R): "Town" from th$town_density,
-#'      "Village" from th$village_density, otherwise "Small village or hamlet".
+#'      Urbanisation grid, R/contiguity.R), the walkable population decides:
+#'      "Town" from th$town_density, "Village" from th$village_density,
+#'      otherwise "Small village or hamlet".
 #'   2. Inside one, a tower is CENTRAL if either holds:
-#'        - nres_ratio is at least th$centre_nres_ratio: the non-residential
-#'          share of the buildings around the church, divided by the same
-#'          share for its whole urban centre. A centre is where its town's
-#'          shops and offices are, which population density cannot show,
-#'          because town centres are short of residents;
+#'        - it is on or by a high street: within th$centre_retail_m of a
+#'          retail centre of tier th$centre_retail_tier or larger (in the UK,
+#'          where retail centres are mapped: retail_near);
+#'          where they are not mapped (abroad, retail_near is NA), the
+#'          non-residential share of the buildings round the church is at
+#'          least th$centre_nres_ratio times its urban centre's;
 #'        - there are th$old_centre_towers or more frame towers within 1 km,
 #'          the tower itself included (an old centre).
 #'      If that leaves a settlement with no central tower at all, its densest
@@ -105,24 +108,27 @@ classify_settlement_a <- function(d, pop2, pop5, region, society, th, levels) {
 #'
 #' @param centre_key Identifier of the urban centre (NA if none).
 #' @param centre_pop Its population (NA if none).
-#' @param local_d The tower's local density (people per km2 of land): the
-#'   town and village lines, and the fallback centre.
+#' @param local_d The tower's walkable population density (people per km2 of
+#'   land): the town and village lines, and the fallback centre.
+#' @param retail_near Logical: within the retail distance of a large enough
+#'   retail centre; NA where retail centres are not mapped.
 #' @param nres_ratio Non-residential share around the church divided by its
-#'   urban centre's (NA where nothing is built, treated as not central).
+#'   urban centre's; used only where retail_near is NA.
 #' @param towers_1km Frame towers within 1 km, the tower itself included.
 #' @param eligible Logical: may this tower be a settlement's fallback centre?
 #'   (Frame towers only, so that towers outside the frame never change the
 #'   result for those in it.)
-#' @param th Named list: conurbation_pop, centre_nres_ratio, old_centre_towers,
-#'   town_density, village_density.
+#' @param th Named list: conurbation_pop, centre_retail_tier, centre_retail_m,
+#'   centre_nres_ratio, old_centre_towers, town_density, village_density.
 #' @param levels Factor levels for the result.
-classify_settlement_b <- function(centre_key, centre_pop, local_d, nres_ratio,
+classify_settlement_c <- function(centre_key, centre_pop, local_d, retail_near, nres_ratio,
                                   towers_1km, eligible, th, levels) {
   in_centre <- !is.na(centre_pop)
   eligible <- rep_len(eligible, length(centre_pop))
   conurb <- in_centre & centre_pop >= th$conurbation_pop
-  central <- in_centre & (dplyr::coalesce(nres_ratio >= th$centre_nres_ratio, FALSE) |
-                            towers_1km >= th$old_centre_towers)
+  commercial <- dplyr::coalesce(retail_near,
+                                dplyr::coalesce(nres_ratio >= th$centre_nres_ratio, FALSE))
+  central <- in_centre & (commercial | towers_1km >= th$old_centre_towers)
   # Every settlement has a centre: where none qualifies, its densest eligible
   # tower is central.
   key <- ifelse(in_centre, centre_key, "")
@@ -139,6 +145,15 @@ classify_settlement_b <- function(centre_key, centre_pop, local_d, nres_ratio,
     TRUE                           ~ "Small village or hamlet"
   )
   factor(type, levels = levels)
+}
+
+#' Is a tower on or by a high street?
+#'
+#' TRUE if the nearest retail centre of tier th$centre_retail_tier or larger is
+#' within th$centre_retail_m metres; NA where retail centres are not mapped.
+#' d_by_tier is a data frame with columns retail_d_t3_m ... retail_d_t6_m.
+retail_near <- function(d_by_tier, th) {
+  d_by_tier[[paste0("retail_d_t", th$centre_retail_tier, "_m")]] <= th$centre_retail_m
 }
 
 #' Tower clusters: many towers within walking distance of each other

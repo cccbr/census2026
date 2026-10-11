@@ -65,18 +65,23 @@ but none affects any other tower's type. Click a dot for the
     measures behind its type. The types are provisional: see the analysis chapter
     <em>Choosing a classification</em>.</p>
     <p>Outside cities, towns and villages are set by the density of people
-    around the church: people per km&sup2; of land, nearer people counting more
-    (the weight halves every 500 m). Inside a continuous built-up area of 50,000
-    or more, a church is in a <em>centre</em> if the buildings round it are at
-    least as commercial as its town's as a whole (the non-residential share of
-    the built-up surface), or if it stands among three or more towers;
-    otherwise it is in a <em>suburb</em>. Every town has at least one centre.
+    within a short walk of the church: people per km&sup2; of land, nearer people
+    counting more (the weight halves every 250 m). Inside a continuous built-up
+    area of 50,000 or more, a church is in a <em>centre</em> if it is within 250 m
+    of a high street of District Centre size or larger, or if it stands among
+    three or more towers; otherwise it is in a <em>suburb</em>. Outside the UK,
+    where high streets are not mapped, the buildings round the church must be at
+    least as commercial as its town's as a whole. Every town has at least one
+    centre.
     A <strong>bold outline</strong> marks a tower cluster: five or more towers
     within 1 km, close enough for one band to ring several.</p>
     <p>Tower data from <a href="https://dove.cccbr.org.uk">Dove's Guide for Church Bell
     Ringers</a>, &copy; the Central Council of Church Bell Ringers, licensed
     <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>;
-    modified. Population and buildings: GHSL, &copy; European Union. Map tiles &copy;
+    modified. Population and buildings: GHSL, &copy; European Union. Retail
+    centres: Retail Centre Boundaries, Geographic Data Service / Consumer Data
+    Research Centre, Open Government Licence, built from Foursquare Open Source
+    Places (Apache 2.0) and OpenStreetMap. Map tiles &copy;
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.
     This page contains no personal data.</p>
     <p id="gen"></p>
@@ -180,7 +185,11 @@ but none affects any other tower's type. Click a dot for the
         ["Type", D.types[t] + " <span style=\"color:#5f6368\">(1988: " + (r[F.cl] === 1 ? "Large City" : D.types1988[t]) + ")</span>"],
         ["Ringable", ur ? "No: outside the frame, shown faded" : ""],
         ["Bells", r[F.bells]],
-        ["Density around the church (500 m kernel)", fmt(r[F.density]) + " per km&sup2;"],
+        ["Density within a short walk (250 m kernel)", fmt(r[F.density]) + " per km&sup2;"],
+        ["Density beyond a short walk", r[F.beyond] === null ? "" : fmt(r[F.beyond]) + " per km&sup2;"],
+        ["Nearest high street", r[F.shop] === null ? "not mapped here" : esc(D.shops[r[F.shop]][0]) +
+          " <span style=\"color:#5f6368\">(" + esc(D.shops[r[F.shop]][1]) + ", " + fmt(r[F.shop_m]) + " m)</span>"],
+        ["District Centre or larger", r[F.dc_m] === null ? "" : fmt(r[F.dc_m]) + " m away"],
         ["Non-residential share of buildings round it", r[F.nres] === null ? "none built" : Math.round(100 * r[F.nres]) + "%" +
           (r[F.nres_ratio] === null ? "" : " <span style=\"color:#5f6368\">(" + r[F.nres_ratio].toFixed(2) + " &times; its built-up area's)</span>")],
         ["Tower cluster", r[F.cl] === 1 ? "Yes: " + r[F.towers_1km] + " towers within 1 km" : ""],

@@ -52,6 +52,8 @@ latest".
 | `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
 | `09_build_widget_paste.R` | Strips comments from the two QuestionPro widgets so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | `inst/questionnaire/build/*.paste.js` | seconds |
 | `10_export_settlement_map.R` | Publishes an interactive map of the draft settlement types, for volunteers to check | `docs/settlement-map/index.html` (served by GitHub Pages) | seconds |
+| `11_import_gb_register.R` | Imports the Gloucester & Bristol Association's 2025 tower register and proposes a name-to-Dove crosswalk. The counts stay out of the repo (Q-025); see `data/reference/gb_register.md` | `data/curated/gb_register_<snapshot>.parquet`, `data/reference/gb_register_crosswalk.csv` | seconds |
+| `12_build_retail_context.R` | Distance from each UK tower to the nearest high street of each size, from the CDRC Retail Centre Boundaries (downloaded by hand after registration into `data/raw/cdrc_retail/<date>/`). Run after 08 and before rendering or script 10 | `data/curated/tower_retail_<snapshot>.parquet` | seconds |
 
 ### What the settlement measures are
 
@@ -94,7 +96,7 @@ self-contained file, so it also opens straight from disk.
 
 Script 10 builds it from the same code as the analysis chapters
 (`analysis/_common.R`), so the map always shows the current classification.
-Re-run script 10 after changing the classification or re-running script 08,
+Re-run script 10 after changing the classification or re-running script 08 or 12,
 then commit the page. It contains no personal data, and carries Dove's
 CC BY-SA attribution.
 

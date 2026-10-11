@@ -21,7 +21,7 @@
 # exported.
 
 source(here::here("scripts", "00_setup.R"))
-source(here::here("analysis", "_common.R"))   # frame_towers, Draft B, known
+source(here::here("analysis", "_common.R"))   # frame_towers, Draft C, known
 
 TEMPLATE <- here::here("inst", "settlement_map", "map_template.html")
 OUT_DIR  <- here::here("docs", "settlement-map")
@@ -42,6 +42,7 @@ unringable <- frame |>
                    .by = "tower_id") |>
   dplyr::inner_join(locations, by = "tower_id") |>
   dplyr::inner_join(context |> dplyr::select(-"in_frame"), by = "tower_id") |>
+  dplyr::left_join(retail, by = "tower_id") |>
   dplyr::left_join(
     special |> dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
       dplyr::select("tower_id", special = "category"),
@@ -53,10 +54,13 @@ unringable <- frame |>
     centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
                         paste(round(.data$centre_pop), .data$centre_km2)),
     nres_ratio = .data[[NRES_VAR]] / .data$centre_nres_share,
-    type = classify_settlement_b(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
-                                 .data$nres_ratio, .data$towers_1km, FALSE,
-                                 DRAFT_B, TYPE_LEVELS),
-    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_B)
+    beyond_walk = (.data$pop_k2km - .data$pop_k250m) /
+      (.data$land_km2_k2km - .data$land_km2_k250m),
+    retail_near = retail_near(dplyr::pick(dplyr::starts_with("retail_d_t")), DRAFT_C),
+    type = classify_settlement_c(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
+                                 .data$retail_near, .data$nres_ratio, .data$towers_1km, FALSE,
+                                 DRAFT_C, TYPE_LEVELS),
+    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_C)
   )
 n_unringable_no_context <- sum(!frame$is_ringable) - nrow(unringable) -
   sum(!frame$is_ringable & frame$tower_id %in% towers$tower_id)
@@ -74,8 +78,15 @@ centres <- shown |>
   dplyr::distinct(.data$centre_key, .data$centre_pop) |>
   dplyr::mutate(centre = dplyr::row_number() - 1L)
 
+# Retail centres too: name and class once each; towers carry an index.
+shops <- shown |>
+  dplyr::filter(!is.na(.data$retail_nearest_name)) |>
+  dplyr::distinct(.data$retail_nearest_name, .data$retail_nearest_class) |>
+  dplyr::mutate(shop = dplyr::row_number() - 1L)
+
 rows <- shown |>
   dplyr::left_join(known |> dplyr::select("tower_id", "feels_like"), by = "tower_id") |>
+  dplyr::left_join(shops, by = c("retail_nearest_name", "retail_nearest_class")) |>
   dplyr::left_join(centres |> dplyr::select("centre_key", "centre"), by = "centre_key") |>
   dplyr::transmute(
     lat   = round(.data$lat, 4),                    # about 10 m
@@ -83,7 +94,11 @@ rows <- shown |>
     label = .data$display,
     bells = .data$bells,
     type  = as.integer(.data$type) - 1L,            # 0-based for JavaScript
-    density = signif(.data[[LOCAL_VAR]], 3),         # 500 m kernel
+    density = signif(.data[[LOCAL_VAR]], 3),         # 250 m kernel
+    beyond = signif(.data$beyond_walk, 2),           # density beyond a short walk
+    shop  = .data$shop,                              # nearest retail centre (index)
+    shop_m = .data$retail_nearest_m,                 # ... metres to it
+    dc_m  = .data$retail_d_t4_m,                     # metres to a District Centre or larger
     nres  = round(.data[[NRES_VAR]], 3),             # non-residential share
     nres_ratio = round(.data$nres_ratio, 2),         # ... against its built-up area's
     centre = .data$centre,
@@ -103,6 +118,9 @@ payload <- list(
   types1988 = unname(crosswalk_1988[TYPE_LEVELS]),
   colours   = type_colours,
   centres   = unname(purrr::map(signif(centres$centre_pop, 3), \(p) list(p))),
+  # Short name (before the first ";") and class of each nearest retail centre.
+  shops     = unname(purrr::map2(sub(";.*$", "", shops$retail_nearest_name),
+                                 shops$retail_nearest_class, \(n, c) list(n, c))),
   fields    = names(rows),
   rows      = purrr::pmap(rows, \(...) unname(list(...)))   # arrays, not objects
 )

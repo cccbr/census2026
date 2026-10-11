@@ -1106,3 +1106,85 @@ it can pick a suburb where an old centre is empty.
 **Also.** GHS-BUILT-S total and non-residential layers fetched (script 07)
 and summed in script 08 for the 250 m, 500 m and 1 km kernels and over each
 urban centre.
+
+## D-037 — Draft C: centres by their high streets; towns and villages by the walkable population
+
+**2026-10-11 · Provisional (Mark)** · amends D-035, D-036
+
+**Context.** Draft B ran aground on finding centres. Population density
+cannot find a town centre, because centres are short of residents (D-036).
+The non-residential share of buildings did better, but missed town centres
+absorbed into a larger built-up area and promoted suburbs next to industrial
+estates; the satellite layer measures footprint and cannot tell a high
+street from a warehouse. Separately, the 500 m kernel made villages near a
+town into towns: Datchworth and Tewin, a mile or two from Welwyn and Welwyn
+Garden City. The check that had favoured 500 m (agreement with the
+international urban clusters, D-035) rewarded that blurring, because those
+clusters join such villages to the town next door (Codicote and Tewin are in
+London's 12.8 million cluster). An isolation split among villages was
+considered and withdrawn by Mark: keep the village / small village or hamlet
+split, and keep isolation as a measure.
+
+**Decision.**
+- **Towns and villages** by people per km² of land in the 250 m kernel
+  (the walkable population): town 600, village 200, below 200 small village
+  or hamlet. The town line is D-033's. The village line sits below the
+  international cluster line (300) on purpose (Mark): its job is to stop
+  "village" being one monolithic class, and at 300 the smaller-named type
+  would have been the larger (42% of frame towers against 13%).
+- **Centre or suburb** inside an urban centre: central if within 250 m of a
+  CDRC retail centre of District Centre size or larger (tiers 1–4: Regional
+  Centre, Major Town Centre, Town Centre, Market Town, District Centre;
+  retail parks and shopping centres excluded), or 3 or more frame towers
+  within 1 km, itself included. Abroad, where retail centres are not mapped,
+  D-036's non-residential share rule (ratio ≥ 1) applies. The densest-tower
+  fallback stays, so every settlement has a centre.
+- Neutral names, the tower-cluster flag (5+ towers within 1 km, itself
+  included, or on the special list) and the 1988 crosswalk unchanged.
+- **Kept as measures, not classifiers:** `beyond_walk`, people per km² of
+  land between the 250 m and 2 km kernels, which sorts the systematic draw
+  within strata; and the non-residential share.
+- Source: Retail Centre Boundaries (UK), Geographic Data Service / CDRC,
+  Open Government Licence (built from Foursquare Open Source Places, Apache
+  2.0, and OpenStreetMap). Snapshot `cdrc_retail_2026-10-11`;
+  `scripts/12_build_retail_context.R` writes
+  `data/curated/tower_retail_dove_2026-09-19.parquet`.
+
+**Evidence** (real data, 11 October; the chapters recompute all of it).
+Centre rules on 34 test centres and 19 test suburbs, with shares of
+comparable towers (1988: Large City 6%, Suburban 11%, Inner City 2%):
+
+| Rule | Large City | Suburban | Inner City | Centres missed | Suburbs made central |
+| --- | --- | --- | --- | --- | --- |
+| Density against its built-up area's | 7% | 5% | 4% | 14 | 3 |
+| Non-residential share ≥ its area's (Draft B) | 6% | 7% | 3% | 5 | 6 |
+| Town Centre or larger within 250 m | 5% | 10% | 2% | 6 | 2 |
+| **District Centre or larger within 250 m** | 5% | 9% | 3% | 4 | 2 |
+| District Centre or larger within 400 m | 5% | 9% | 3% | 2 | 3 (Staines) |
+| Local Centre or larger within 250 m | 5% | 8% | 3% | 3 | 2 |
+
+All 12 known towers agree under the chosen rule (11 at 400 m: Staines
+becomes central). Town Centres alone make Warwick and Dudley suburbs: the
+CDRC classes old towns that do not lead their authority or built-up area
+as District Centres. Local Centres are a close call (47 more towers
+central, a mix of absorbed small towns and suburban village high streets);
+the stricter rule is kept. Missed: Epsom, Hastings (Old Town), Stockport
+S George (arguably a mislabelled test case; S Mary is central), Waltham
+Abbey. Made central: Dunstable (a town in its own right), Eltham.
+
+Gloucester & Bristol register (226 matched frame towers; Q-025, not for
+publication): density on the 250 m kernel fits best for having no
+registered ringers (logit AIC 249.8) and for the number of ringers
+(negative binomial, theta estimated, AIC 1161.2); 500 m close behind (+1.6,
++1.7); fit worsens steadily to 8 km (+8.8, +19.7). `beyond_walk` adds
+nothing (+2.0 AIC in both). Caveats: one Association; registered is not
+ringing; crosswalk unreviewed; the scale was chosen partly on this test.
+
+Shares of comparable towers: village 56% (1988: 53%), town 28% (28%),
+large city 5% (6%), suburban 9% (11%), inner city 3% (2%). Frame towers:
+small village or hamlet 1,950 (34%), village 1,243 (22%), town 1,566 (27%).
+Rings of 8 or more: 13%, 26%, 62%.
+
+**Known weak points.** Churches set back from the high street; the retail
+map is UK only and a snapshot; the village line is a convenience, not a
+natural break.

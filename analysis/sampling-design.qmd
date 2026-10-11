@@ -9,7 +9,7 @@ title: "Choosing a sampling method"
 # this file's place in the repo fixes the root at the repository itself.
 here::i_am("analysis/sampling-design.qmd")
 source(here::here("scripts", "00_setup.R"))
-source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft B
+source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft C
 library(BalancedSampling)   # local pivotal method; install + renv::snapshot()
 
 # ---- choices this chapter makes, all provisional ----------------------------
@@ -103,11 +103,13 @@ Nh <- table(strata)
 nh <- pmin(Nh, pmax(MIN_PER_CELL, round(n * Nh / N)))
 pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
 
-# Sort order for the systematic design: type, then ring class, then density,
-# reversing direction in alternate groups ("serpentine") so neighbours in the
-# list stay similar across group boundaries.
+# Sort order for the systematic design: type, then ring class, then the
+# density beyond a short walk (D-037), so each type's draw spreads from
+# places alone in open country to places near a town. Direction reverses in
+# alternate groups ("serpentine") so neighbours in the list stay similar
+# across group boundaries.
 grp <- as.integer(interaction(pop$stratum_type, pop$ring_stratum, lex.order = TRUE, drop = TRUE))
-sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]] + 1))
+sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pmax(pop$beyond_walk, 0) + 1))
 
 # Place measures plus ring size. "Growth since the bells" is left out: it is
 # computed from ring size, so it would carry ring size in twice.
@@ -223,7 +225,7 @@ the measures and ring size when drawing the chased sample.
 - *Align with good, defensible practice*, and explain it to delegates.
 - *Pay heed to 1988*, which drew a simple random sample of 500 towers.
 
-**What this chapter uses.** The working classification (Draft B), and the
+**What this chapter uses.** The working classification (Draft C), and the
 1988 survey's published rates to build stand-in populations. Both are
 provisional, so the comparison between designs matters more than any single
 number.
@@ -257,7 +259,7 @@ way of drawing gives the most accurate estimates? Five designs are compared:
 | --- | --- |
 | Simple random | Every set of towers equally likely. The baseline, and what 1988 did |
 | Stratified: type x ring size | Fixed numbers from each combination of place type and ring-size class, in proportion to its size, at least `r MIN_PER_CELL` each |
-| Sorted systematic | List the towers by type, ring size and density, then take every k-th from a random start |
+| Sorted systematic | List the towers by type, ring size and the density beyond a short walk (how near other places are), then take every k-th from a random start |
 | Spread: measures only | Local pivotal method:^[Grafström, Lundström & Schelin (2012).] towers similar in density, isolation, coast and ring size compete, so the sample spreads evenly across those measures |
 | Spread: measures + map | The same, with map position added, so the sample also spreads across the country |
 

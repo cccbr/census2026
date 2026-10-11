@@ -68,13 +68,20 @@ tested with the other analysis volunteers.*
 
 **What this chapter establishes, and what it feeds into the classification.**
 
-- **A 500 m kernel describes a tower's own neighbourhood** (D-035), chosen
-  to describe places as they are today. *Used for:* the town and village
-  lines in *Choosing a classification*.
-- **What is built round a church tells a centre from a suburb** (D-036).
-  Town centres are short of residents, so population density cannot find
-  them; the non-residential share of buildings can. *Used for:* centre or
-  suburb, inside a city or conurbation.
+- **The walkable population describes a tower's own place** (D-037): people
+  per km² of land within a short walk, on the 250 m kernel. Wider kernels
+  count the next village or town; and in the Gloucester & Bristol register,
+  the 250 m kernel best tells towers with a band from towers without one.
+  *Used for:* the town and village lines in *Choosing a classification*.
+- **High streets tell a centre from a suburb** (D-037). Town centres are
+  short of residents, so population density cannot find them. Mapped retail
+  centres can, better than the non-residential share of buildings (D-036),
+  which is kept as a measure and used abroad. *Used for:* centre or suburb,
+  inside a city or conurbation.
+- **Isolation is measured, not typed.** The density beyond a short walk
+  (`beyond_walk`) tells a village alone in open country from one near a
+  town. It added nothing to the walkable density in the register, so it
+  sorts the draw rather than defining a type.
 - **Cities need the settlement's own edge, not a radius.** Continuous
   built-up areas, traced with the international Degree of Urbanisation's
   rules, separate a free-standing city from a suburb where distance measures
@@ -155,6 +162,16 @@ Script 08 describes the area around each tower in three ways.
   Layer, with the same figures for the tower's whole urban centre. Named
   `built_km2_<m>`, `nres_km2_<m>` and `nres_share_<m>`, the non-residential
   share. It measures ground covered, not floor space.
+- **Retail centres** (added 11 October, D-037, script 12). The distance from
+  each UK tower to the nearest mapped retail centre of each size, from the
+  Consumer Data Research Centre's Retail Centre Boundaries (Open Government
+  Licence): `retail_d_t3_m` to `retail_d_t6_m`, metres to the nearest Town
+  Centre or larger (tier 3) down to any high-street centre (tier 6), 0
+  inside one; and the nearest centre's name, class and distance. Retail
+  parks and shopping centres are left out. Not available outside the UK.
+- **Density beyond a short walk** (`beyond_walk`, D-037). The people in the
+  2 km kernel but not the 250 m kernel, per km² of the land between them:
+  how crowded the surrounding country is, with the place itself netted out.
 
 The kernels and circles count three things: **people** (from the EU's Global
 Human Settlement Layer), and **towers** and **bells** (from the sampling
@@ -529,6 +546,116 @@ ggplot(tw, aes(coast, isolation, colour = smod_class)) +
        y = "Isolation: log10(local / wider land density)")
 ```
 
+## Which scale tells a band? The Gloucester & Bristol test
+
+**Why this test.** The settlement types are meant to describe places as
+they are for today's bands, without using ring size (D-028, D-035). Ring
+size can say which scale fits the places the bells were cast for; it
+cannot say which scale fits today's bands. The Gloucester & Bristol
+Diocesan Association's 2025 register can: it records, for each of its
+towers, the ringers on its books (`data/reference/gb_register.md`).
+
+**The test.** For each kernel, two models of the same towers, each with
+the ring size class as a control and the logged density of people per km²
+of land on that kernel:
+
+- whether the tower has *no* registered ringers (logistic regression);
+- how many ringers it has (negative binomial regression, which allows for
+  counts more spread out than a Poisson model would).
+
+A lower AIC (Akaike's information criterion: fit, penalised for the number
+of terms) is better; differences of 2 or more are worth noting, 10 or more
+are large. The same is then tried with the density *beyond* a short walk
+(`beyond_walk`) added, to see whether isolation tells anything that the
+walkable population does not.
+
+```{r}
+#| label: gb-load
+#| include: false
+# The register's counts are third-party data held outside the public repo
+# (Q-025). If it is not on this machine, the section says so and stops.
+gb_file <- utils::tail(sort(fs::dir_ls(here::here("data", "curated"),
+                                       glob = "*gb_register_*.parquet")), 1)
+has_gb <- length(gb_file) == 1
+if (has_gb) {
+  gb <- arrow::read_parquet(gb_file) |>
+    dplyr::filter(!is.na(.data$tower_id), !.data$unattached, is.na(.data$joint_with)) |>
+    dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
+    dplyr::select("tower_id", "ringers") |>
+    dplyr::inner_join(tw, by = "tower_id") |>
+    dplyr::mutate(none = .data$ringers == 0,
+                  walk = lg(.data$density_land_k250m),
+                  beyond = lg(pmax(.data$beyond_walk, 0)))
+  gb_kernels <- paste0("density_land_k", c("250m", "500m", "1km", "2km", "4km", "8km"))
+  fit_none <- \(f, d = gb) stats::glm(f, data = d, family = stats::binomial)
+  fit_band <- \(f, d = gb) MASS::glm.nb(f, data = d)
+  gb_scale <- purrr::map(gb_kernels, \(v) {
+    dv <- dplyr::mutate(gb, d = lg(.data[[v]]))
+    m1 <- fit_none(none ~ bell_class + d, dv); m2 <- fit_band(ringers ~ bell_class + d, dv)
+    tibble::tibble(kernel = measure_label(sub("density_land_", "", v)),
+                   `no ringers: coefficient` = round(stats::coef(m1)[["d"]], 2),
+                   `no ringers: AIC` = round(stats::AIC(m1), 1),
+                   `ringers: coefficient` = round(stats::coef(m2)[["d"]], 2),
+                   `ringers: AIC` = round(stats::AIC(m2), 1))
+  }) |> purrr::list_rbind()
+  best_none <- gb_scale$kernel[which.min(gb_scale$`no ringers: AIC`)]
+  best_band <- gb_scale$kernel[which.min(gb_scale$`ringers: AIC`)]
+  gb_gap <- round(c(diff(gb_scale$`no ringers: AIC`[1:2]), diff(gb_scale$`ringers: AIC`[1:2]),
+                    gb_scale$`no ringers: AIC`[6] - gb_scale$`no ringers: AIC`[1],
+                    gb_scale$`ringers: AIC`[6] - gb_scale$`ringers: AIC`[1]), 1)
+  m_w  <- list(fit_none(none ~ bell_class + walk), fit_band(ringers ~ bell_class + walk))
+  m_wb <- list(fit_none(none ~ bell_class + walk + beyond),
+               fit_band(ringers ~ bell_class + walk + beyond))
+  gb_beyond <- tibble::tibble(
+    outcome = c("no registered ringers", "ringers on the register"),
+    `walkable density: AIC` = round(purrr::map_dbl(m_w, stats::AIC), 1),
+    `with beyond_walk added: AIC` = round(purrr::map_dbl(m_wb, stats::AIC), 1),
+    `beyond_walk coefficient` = round(purrr::map_dbl(m_wb, \(m) stats::coef(m)[["beyond"]]), 2)
+  )
+}
+```
+
+`r if (!has_gb) "**The register is not on this machine**, so this section is skipped. Run scripts/11_import_gb_register.R with the spreadsheet in data/raw/gb_register/ to include it." else ""`
+
+```{r}
+#| label: tbl-gb-scale
+if (has_gb) {
+  gb_scale |>
+    knitr::kable(caption = paste0("Gloucester & Bristol register: density at each kernel against having no registered ringers, and against the number of ringers, controlling for ring size (", nrow(gb), " frame towers matched)"))
+}
+```
+
+```{r}
+#| label: tbl-gb-beyond
+if (has_gb) {
+  gb_beyond |>
+    knitr::kable(caption = "Does density beyond a short walk add anything to the walkable density?")
+}
+```
+
+`r if (has_gb) paste0("**What the test shows.** The best fit for having no registered ringers is the ", best_none, ", and for the number of ringers the ", best_band, ". The 500 m kernel is close behind (AIC higher by ", gb_gap[1], " and ", gb_gap[2], "); from 1 km outwards the fit worsens steadily, by ", gb_gap[3], " and ", gb_gap[4], " at 8 km. Denser places have bigger bands and fewer towers without one. Adding the density beyond a short walk ", ifelse(all(gb_beyond[[3]] > gb_beyond[[2]] - 2), "adds nothing worth its extra term", "improves the fit"), ".") else ""`
+
+**What that means for the classification.** If the walkable population is
+what matters for a band, the town and village lines should be drawn on it,
+and *Choosing a classification* now does so (Draft C, D-037). Isolation is
+kept as a measure, to spread the draw, not as a type.
+
+**How far to trust it.**
+
+- *One Association*, mostly rural Gloucestershire and the Bristol area. The
+  census itself should re-test the scale.
+- *Registered is not ringing.* A ringer is registered at one tower but may
+  ring at several; a tower with no one registered may be rung by a visiting
+  or shared band.
+- *The name-to-Dove crosswalk is not yet reviewed*; a few dozen register
+  rows are unmatched and left out.
+- *The scale was chosen partly on this test*, so the same data cannot also
+  confirm it. Later analyses of band size by type will look a little
+  cleaner than they would on a scale chosen blind.
+- *Not for publication* (Q-025). The figures above are derived from the
+  Association's counts. The rendered book stays within the analysis team
+  until the Association agrees.
+
 ## Do the towers fall into natural groups?
 
 If the towers formed clear groups, the classification could simply name
@@ -684,3 +811,17 @@ GHS-SMOD R2023A (Schiavina et al. 2023).
 **Clusters.** Rousseeuw, P. J. (1987), "Silhouettes: a graphical aid to the
 interpretation and validation of cluster analysis", *Journal of
 Computational and Applied Mathematics* 20, 53–65.
+
+**Retail centres.** Goodwin, O., Yin, Z., Ye, Z., Singleton, A. and Dolega,
+L., *An Open Framework for Delineating and Classifying Retail Centres across
+the United Kingdom* (working paper, with the data). Retail Centre
+Boundaries (UK), Geographic Data Service / Consumer Data Research Centre,
+https://data.geods.ac.uk/dataset/retail-centre-boundaries, Open Government
+Licence. Distances computed in British National Grid by
+`scripts/12_build_retail_context.R`.
+
+**Band test.** Gloucester & Bristol Diocesan Association, tower register
+2025, shared by its treasurer, Richard Heys, on 11 October 2026; held
+outside the public repository (Q-025). Negative binomial models fitted with
+`MASS::glm.nb` (Venables, W. N. and Ripley, B. D. (2002), *Modern Applied
+Statistics with S*, 4th edition, Springer).

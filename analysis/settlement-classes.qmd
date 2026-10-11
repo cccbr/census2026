@@ -9,7 +9,7 @@ title: "Choosing a classification"
 # this file's place in the repo fixes the root at the repository itself.
 here::i_am("analysis/settlement-classes.qmd")
 source(here::here("scripts", "00_setup.R"))
-source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft B
+source(here::here("analysis", "_common.R"))   # data, provisional choices, Draft C
 ```
 
 ```{r}
@@ -72,15 +72,15 @@ share_1988_types <- function(types, crosswalk) {
 shares_vs_1988 <- tibble::tibble(
   type_1988 = TYPES_1988,
   draft_a   = share_1988_types(comparable_1988$type_a, crosswalk_1988_a),
-  draft_b   = as.numeric(prop.table(table(factor(comparable_1988$type_1988, levels = TYPES_1988))))
+  draft_c   = as.numeric(prop.table(table(factor(comparable_1988$type_1988, levels = TYPES_1988))))
 ) |>
   dplyr::left_join(counts_1988 |> dplyr::select("type_1988", "share_best", "share_lo", "share_hi"),
                    by = "type_1988")
 village_a <- shares_vs_1988$draft_a[shares_vs_1988$type_1988 == "Village"]
-village_b <- shares_vs_1988$draft_b[shares_vs_1988$type_1988 == "Village"]
+village_c <- shares_vs_1988$draft_c[shares_vs_1988$type_1988 == "Village"]
 village_88 <- counts_1988$share_best[counts_1988$type_1988 == "Village"]
 
-# ---- independent checks on Draft B -----------------------------------------
+# ---- independent checks on Draft C -----------------------------------------
 ring_check <- frame_towers |>
   dplyr::summarise(towers = dplyr::n(), p8 = mean(.data$bells >= 8),
                    `median growth since bells (u)` = round(stats::median(.data$u), 2),
@@ -103,37 +103,48 @@ FEELS_AGREE <- list(
 agrees <- function(feels, type) {
   purrr::map2_lgl(feels, as.character(type), \(f, t) t %in% FEELS_AGREE[[f]])
 }
-known_b <- known |>
+known_c <- known |>
   dplyr::select("tower_id", "known_by", "relationship", "feels_like", "why") |>
   dplyr::inner_join(towers, by = "tower_id") |>
   dplyr::mutate(agree = agrees(.data$feels_like, .data$type))
-n_known_missing <- nrow(known) - nrow(known_b)
-known_row <- \(id) dplyr::filter(known_b, .data$tower_id == id)
+n_known_missing <- nrow(known) - nrow(known_c)
+known_row <- \(id) dplyr::filter(known_c, .data$tower_id == id)
 welwyn    <- known_row("14639")
 amersham  <- known_row("14913")
 staines   <- known_row("11525")
 st_albans <- known_row("15782")
 
 # ---- reclassify with one threshold changed (for sensitivity tables) ---------
-reclass <- function(d, ...) {
-  th <- utils::modifyList(DRAFT_B, list(...))
-  classify_settlement_b(d$centre_key, d$centre_pop, d[[LOCAL_VAR]], d$nres_ratio,
+# Retail nearness is recomputed from the thresholds, so the retail tier and
+# distance can be varied too. local: the density that sets town and village.
+reclass <- function(d, ..., local = LOCAL_VAR) {
+  th <- utils::modifyList(DRAFT_C, list(...))
+  near <- retail_near(dplyr::select(d, dplyr::starts_with("retail_d_t")), th)
+  classify_settlement_c(d$centre_key, d$centre_pop, d[[local]], near, d$nres_ratio,
                         d$towers_1km, d$in_frame, th, TYPE_LEVELS)
 }
-# The town line at which Draft B's town share comes closest to 1988's.
+# Shares of comparable towers in 1988's three urban types, for a set of types
+# given for every frame tower.
+urban_88 <- function(type) {
+  keep <- frame_towers$tower_id %in% comparable_1988$tower_id
+  t88 <- ifelse(frame_towers$tower_cluster, "Large City",
+                unname(crosswalk_1988[as.character(type)]))[keep]
+  c(`Large City` = mean(t88 == "Large City"), Suburban = mean(t88 == "Suburban"),
+    `Inner City` = mean(t88 == "Inner City"))
+}
+# The town line at which Draft C's town share comes closest to 1988's.
 town_88 <- counts_1988$share_best[counts_1988$type_1988 == "Town"]
-town_b  <- shares_vs_1988$draft_b[shares_vs_1988$type_1988 == "Town"]
-line_grid <- sort(unique(c(seq(300, 1500, by = 50), DRAFT_B$town_density)))
+town_c  <- shares_vs_1988$draft_c[shares_vs_1988$type_1988 == "Town"]
+line_grid <- sort(unique(c(seq(300, 1500, by = 50), DRAFT_C$town_density)))
 town_share_at <- purrr::map_dbl(line_grid, \(t)
   mean(reclass(comparable_1988, town_density = t) == "Town"))
 line_88 <- line_grid[which.min(abs(town_share_at - town_88))]
-village_b_at_88 <- mean(reclass(comparable_1988, town_density = line_88) %in%
+village_c_at_88 <- mean(reclass(comparable_1988, town_density = line_88) %in%
                           c("Village", "Small village or hamlet"))
 
-# ---- how centres are found: evidence for the rule (D-036) -------------------
-# Test cases chosen by Mark and Claude before the rule was settled: churches
-# at the heart of their towns, and churches in suburbs. Each candidate rule
-# compares the area round the church with its own urban centre.
+# ---- how centres are found: evidence for the rule (D-036, D-037) -----------
+# Test cases chosen by Mark and Claude before either rule was settled:
+# churches at the heart of their towns, and churches in suburbs.
 TEST_CENTRES <- c("Wolverhampton, Collegiate", "Rotherham, Minster", "Halifax, Minster",
                   "St Helens, Minster", "Shrewsbury, S Chad", "Warwick, S Mary", "Solihull",
                   "Kingston upon Hull, HT", "Carlisle Cath", "Pontefract, S Giles",
@@ -149,44 +160,77 @@ TEST_SUBURBS <- c("Barnwood", "Dunstable", "Charlton Kings", "Staines, S Peter",
                   "Upton St Leonards", "King's Norton", "Worsley", "Dunham Massey",
                   "Northfield", "Hanwell", "Eltham", "Harraby", "Wimbledon", "Ossett",
                   "Mirfield")
-in_centres <- dplyr::filter(frame_towers, !is.na(.data$centre_pop))
 matches_any <- \(d, names) vapply(d$display, \(x)
   any(startsWith(x, names) | grepl(paste0(", ", names), x, fixed = TRUE)), TRUE)
-is_test_centre <- matches_any(in_centres, TEST_CENTRES)
-is_test_suburb <- matches_any(in_centres, TEST_SUBURBS)
+in_c <- !is.na(frame_towers$centre_pop)
+is_test_centre <- in_c & matches_any(frame_towers, TEST_CENTRES)
+is_test_suburb <- in_c & matches_any(frame_towers, TEST_SUBURBS)
+# Each rule gives every frame tower a type. The first three compare the area
+# round the church with its own urban centre (retail centres switched off, so
+# the comparison decides everywhere); the rest use retail centres.
+no_retail <- \(d) dplyr::mutate(d, dplyr::across(dplyr::starts_with("retail_d_t"), \(x) NA_real_))
+CHOSEN_RULE <- "District Centre or larger within 250 m (Draft C)"
 centre_rules <- list(
-  "people per km² of land" =
-    in_centres[[LOCAL_VAR]] / (in_centres$centre_pop / in_centres$centre_km2),
-  "share of land built on" =
-    (in_centres$built_km2_k500m / in_centres$land_km2_k500m) /
-    (in_centres$centre_built_km2 / in_centres$centre_km2),
-  "non-residential share of buildings" = in_centres$nres_ratio
+  "People per km² of land, against its built-up area's" = \(d)
+    reclass(no_retail(dplyr::mutate(d, nres_ratio = .data[[LOCAL_VAR]] /
+                                      (.data$centre_pop / .data$centre_km2)))),
+  "Share of land built on, against its built-up area's" = \(d)
+    reclass(no_retail(dplyr::mutate(d, nres_ratio = (.data$built_km2_k500m / .data$land_km2_k500m) /
+                                      (.data$centre_built_km2 / .data$centre_km2)))),
+  "Non-residential share of buildings, against its built-up area's (Draft B)" = \(d)
+    reclass(no_retail(d)),
+  "Town Centre or larger within 250 m" = \(d) reclass(d, centre_retail_tier = 3),
+  "District Centre or larger within 250 m (Draft C)" = \(d) reclass(d),
+  "District Centre or larger within 400 m" = \(d) reclass(d, centre_retail_m = 400),
+  "Local Centre or larger within 250 m" = \(d) reclass(d, centre_retail_tier = 5)
 )
-centre_test <- purrr::imap(centre_rules, \(ratio, name) {
-  d <- dplyr::mutate(in_centres, nres_ratio = ratio)
-  central <- !grepl("suburb", reclass(d))
-  short <- \(m) paste(sub(",.*$", "", in_centres$display[m]), collapse = ", ")
-  tibble::tibble(measure = name,
+short <- \(m) paste(sub(",.*$", "", frame_towers$display[m]), collapse = ", ")
+centre_types <- purrr::map(centre_rules, \(f) f(frame_towers))
+centre_test <- purrr::imap(centre_types, \(type, name) {
+  central <- !grepl("suburb", type)
+  u <- urban_88(type)
+  tibble::tibble(rule = name,
+                 `Large City` = pct(u[["Large City"]]), Suburban = pct(u[["Suburban"]]),
+                 `Inner City` = pct(u[["Inner City"]]),
                  `centres made suburbs` = sum(is_test_centre & !central),
                  `the centres` = short(is_test_centre & !central),
                  `suburbs made centres` = sum(is_test_suburb & central),
                  `the suburbs` = short(is_test_suburb & central))
 }) |> purrr::list_rbind()
+ct <- \(rule, col) centre_test[[col]][centre_test$rule == rule]
+known_agree_under <- function(type) {
+  k <- match(known_c$tower_id, frame_towers$tower_id)
+  sum(agrees(known_c$feels_like, type[k]), na.rm = TRUE)
+}
+known_by_rule <- purrr::map_int(centre_types, known_agree_under)
+n_extra_local <- sum(grepl("centre", centre_types[["Local Centre or larger within 250 m"]]) &
+                       !grepl("centre", frame_towers$type))
+staines_at <- \(rule) as.character(centre_types[[rule]][frame_towers$tower_id == "11525"])
 
-# Towns: how often does "Town" coincide with being in an urban cluster
-# (a contiguous built-up area of 5,000+), traced independently of the
-# kernels? Each kernel's line is set to match 1988's share of towns.
+# ---- the town scale ------------------------------------------------------------
+# Each kernel's town line is set to match 1988's share of towns, then each is
+# checked against the contiguous urban clusters (5,000+ people), traced
+# without any kernel. Kept to show why that check misleads: see the prose.
+town_line_for <- function(var) {
+  grid <- signif(stats::quantile(comparable_1988[[var]], seq(0.3, 0.9, by = 0.005), na.rm = TRUE), 2)
+  grid <- sort(unique(grid))
+  share <- purrr::map_dbl(grid, \(t) mean(reclass(comparable_1988, town_density = t,
+                                                 village_density = 0, local = var) == "Town"))
+  grid[which.min(abs(share - town_88))]
+}
 rural_bi <- dplyr::filter(frame_towers, .data$british_isles, is.na(.data$centre_pop))
-town_scale <- tibble::tribble(
-  ~kernel,  ~var,                 ~line,
-  "250 m",  "density_land_k250m", 600,
-  "500 m",  "density_land_k500m", DRAFT_B$town_density,
-  "1 km",   "density_land_k1km",  350,
-  "2 km",   "density_land_k2km",  350
+town_scale <- tibble::tibble(
+  kernel = c("250 m", "500 m", "1 km", "2 km"),
+  var = paste0("density_land_k", c("250m", "500m", "1km", "2km"))
 ) |>
-  dplyr::mutate(agree = purrr::map2_dbl(.data$var, .data$line, \(v, l)
-    mean((rural_bi[[v]] >= l) == !is.na(rural_bi$urban_pop))))
-
+  dplyr::mutate(line = purrr::map_dbl(.data$var, town_line_for),
+                agree = purrr::map2_dbl(.data$var, .data$line, \(v, l)
+                  mean((rural_bi[[v]] >= l) == !is.na(rural_bi$urban_pop))))
+# Three Hertfordshire villages Mark knows, and the town between them.
+HERTS <- c("Codicote", "Datchworth", "Tewin", "Welwyn")
+herts <- frame_towers |>
+  dplyr::filter(sub(",.*$", "", .data$display) %in% HERTS) |>
+  dplyr::distinct(.data$tower_id, .keep_all = TRUE)
 ```
 
 *Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
@@ -198,10 +242,10 @@ reviewed.*
 *Mark's take, drafted by Claude from Mark's decisions. Tentative: to be
 tested with the other analysis volunteers.*
 
-**Current recommendation.** Use Draft B to describe every tower and to
+**Current recommendation.** Use Draft C to describe every tower and to
 stratify the chased sample. It answers "what sort of place are these bells
 in?" from place measures alone, in seven types. Towers in a tower cluster
-(`r fmt(DRAFT_B$cluster_towers)` or more towers within 1 km) are flagged
+(`r fmt(DRAFT_C$cluster_towers)` or more towers within 1 km) are flagged
 on top of their type:
 
 ```{r}
@@ -212,52 +256,60 @@ frame_towers |>
   dplyr::left_join(tibble::tibble(
     type = factor(TYPE_LEVELS, levels = TYPE_LEVELS),
     `in plain words` = c(
-      paste0("Under ", fmt(DRAFT_B$village_density), " people per km² of land around the church"),
-      paste0(fmt(DRAFT_B$village_density), " to ", fmt(DRAFT_B$town_density), " people per km² of land around the church"),
-      paste0(fmt(DRAFT_B$town_density), "+ people per km² of land around the church, outside any city"),
-      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people, away from its centre"),
-      "In the centre of that built-up area: where its shops and offices are, or among its old churches",
-      paste0("In a continuous built-up area of ", fmt(DRAFT_B$conurbation_pop), " people or more, away from a centre"),
+      paste0("Under ", fmt(DRAFT_C$village_density), " people per km² of land within a short walk of the church"),
+      paste0(fmt(DRAFT_C$village_density), " to ", fmt(DRAFT_C$town_density), " people per km² of land within a short walk of the church"),
+      paste0(fmt(DRAFT_C$town_density), "+ people per km² of land within a short walk of the church, outside any city"),
+      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_C$conurbation_pop), " people, away from its centre"),
+      "In the centre of that built-up area: on or by its high street, or among its old churches",
+      paste0("In a continuous built-up area of ", fmt(DRAFT_C$conurbation_pop), " people or more, away from a centre"),
       "In one of a conurbation's centres, by the same test"
     )), by = "type") |>
   dplyr::select("type", "in plain words", "frame towers", "share") |>
   knitr::kable()
 ```
 
-**Settled so far** (decision log D-028, D-029, D-033 to D-036):
+**Settled so far** (decision log D-028, D-029, D-033 to D-037):
 
 - Place measures only. Ring size checks the types but never defines them.
 - Cities, suburbs and conurbations come from the continuous built-up area,
   so St Albans (its own city) and Staines (part of London) fall apart.
-- Outside cities, towns and villages are lines of density, people per km² of
-  land around the church on a 500 m kernel, comparable with the
-  international 300 and 1,500 per km². The town line matches 1988's share
-  of towns.
-- Inside a built-up area, a tower is in a **centre** if the buildings round
-  it are at least as commercial as its town's as a whole: the non-residential
-  share of the built-up surface. Old centres of churches count too, and every
-  settlement has at least one centre. Every other tower is in a **suburb**.
-  No density line is needed inside cities, and London needs no exception.
+- Outside cities, towns and villages are lines of density: people per km²
+  of land within a short walk of the church (the 250 m kernel). A wider
+  kernel picks up the next village, and made villages such as Datchworth and
+  Tewin into towns. The town line is close to 1988's share of towns.
+- Inside a built-up area, a tower is in a **centre** if it stands on or
+  within `r DRAFT_C$centre_retail_m` m of a high street of District Centre
+  size or larger, as mapped by the Consumer Data Research Centre (CDRC).
+  Old centres of churches count too, and every settlement has at least one
+  centre. Every other tower is in a **suburb**. Abroad, where no retail
+  centres are mapped, the non-residential share of buildings decides
+  instead.
 - The names are neutral: centre or suburb, of a conurbation or of a city or
   large town. Nobody's church is graded by a prestigious title.
-- **Tower clusters** are a flag, not a type: `r fmt(DRAFT_B$cluster_towers)`
+- **Tower clusters** are a flag, not a type: `r fmt(DRAFT_C$cluster_towers)`
   or more towers within 1 km, the tower itself included, close enough for one
   band to ring several in a morning.
 - The conurbation line sits in a gap between city sizes, with Bristol inside.
+- Two measures are kept beside the types but play no part in them: the
+  density *beyond* a short walk (between the 250 m and 2 km kernels), which
+  says how isolated a place is and sorts the draw within each stratum; and
+  the non-residential share of buildings.
 - Aligning with 1988's five types is a high priority, given the standing of
   their author.
 
 **Still open.**
 
 1. *Validation.* The lines rest on a few dozen test towers, a dozen known
-   towers and inferred 1988 shares. Volunteers' known towers, recorded
-   before they see the class, and the Gloucester & Bristol register (towers
-   with no registered ringers) would test them properly.
-2. *Absorbed town centres.* Town centres swallowed by a larger built-up
-   area, such as Stockport, Epsom and Pontefract, can fall short of their
-   conurbation's commercial share and come out as suburbs.
-3. *Suburban is still below 1988's share* (`r pct(mean(grepl("suburb", comparable_1988$type)))`
-   against 11%).
+   towers, inferred 1988 shares, and one Association's register. Volunteers'
+   known towers, recorded before they see the class, would test them
+   properly.
+2. *Town centres the retail map misses.* `r ct(CHOSEN_RULE, "centres made suburbs")`
+   of `r sum(is_test_centre)` test centres come out as suburbs
+   (`r ct(CHOSEN_RULE, "the centres")`): their church sits more than
+   `r DRAFT_C$centre_retail_m` m from the mapped high street, or the CDRC
+   files it as a smaller centre.
+3. *Suburban is still below 1988's share*
+   (`r pct(mean(grepl("suburb", comparable_1988$type)))` against 11%).
 4. *The special-case list* (Q-022): now a backstop to the tower-cluster
    flag; its society and university-society rows still need confirming.
 
@@ -319,33 +371,44 @@ decision register (Q-022, Q-023).
 - **The first place-only draft (Draft A) had too many villages.** It put
   `r pct(village_a)` of comparable towers in villages, against 1988's
   `r pct(village_88)`, and could not tell St Albans from Staines.
-- **The working draft (Draft B) starts from the settlement the tower stands
-  in.** A tower inside a continuous built-up area of 50,000 or more is in
-  one of its centres or in a suburb; the area's size makes it a conurbation
-  or a city or large town. Elsewhere, the number of people around the church makes it
-  a town, a village, or a small village or hamlet.
-- **Draft B's shares are close to 1988's.** Mapped onto 1988's five types,
-  it puts `r pct(village_b)` of comparable towers in villages and
-  `r pct(town_b)` in towns, against 1988's `r pct(village_88)` and
-  `r pct(town_88)`. `r if (line_88 == DRAFT_B$town_density) "The town line is the one that best matches 1988's share of towns." else paste0("A town line of ", fmt(line_88), " per km², instead of ", fmt(DRAFT_B$town_density), ", would match 1988's share of towns more closely.")`
-- **Centres are found by what is built there, not who lives there.** Town
-  centres are short of residents, so population density called many of them
-  suburbs. The non-residential share of buildings makes
-  `r sum(centre_test[[2]][centre_test$measure == "non-residential share of buildings"])`
-  of `r sum(is_test_centre)` test centres into suburbs, against
-  `r centre_test[[2]][centre_test$measure == "people per km² of land"]` by
-  population density.
+- **Draft B ran aground on finding town centres.** It started from the
+  settlement the tower stands in, which works. But population density could
+  not find centres, because centres are short of residents; the share of
+  non-residential buildings did better, but still missed absorbed town
+  centres and promoted suburbs next to industrial estates. Its 500 m kernel
+  also made some villages into towns.
+- **The working draft (Draft C) finds centres by their high streets.** A
+  tower inside a continuous built-up area of 50,000 or more is in a centre
+  if it is within `r DRAFT_C$centre_retail_m` m of a District Centre or
+  larger. On the test cases it misplaces
+  `r ct(CHOSEN_RULE, "centres made suburbs")` of `r sum(is_test_centre)`
+  centres and `r ct(CHOSEN_RULE, "suburbs made centres")` of
+  `r sum(is_test_suburb)` suburbs, against
+  `r ct("Non-residential share of buildings, against its built-up area's (Draft B)", "centres made suburbs")`
+  and
+  `r ct("Non-residential share of buildings, against its built-up area's (Draft B)", "suburbs made centres")`
+  for Draft B's rule.
+- **Towns and villages by the walkable population.** Outside cities, people
+  per km² of land within a short walk (the 250 m kernel) decides. It keeps
+  villages near a town, such as Datchworth and Tewin, as villages. In the
+  Gloucester & Bristol register, it is also the scale at which density best
+  tells towers with a band from towers without one (chapter *Towers and the
+  places they stand in*).
+- **Draft C's shares are close to 1988's.** Mapped onto 1988's five types,
+  it puts `r pct(village_c)` of comparable towers in villages and
+  `r pct(town_c)` in towns, against 1988's `r pct(village_88)` and
+  `r pct(town_88)`.
 - **It flags tower clusters by measure.** `r sum(frame_towers$tower_cluster)` frame
-  towers have `r fmt(DRAFT_B$cluster_towers)` or more towers within 1 km, or
+  towers have `r fmt(DRAFT_C$cluster_towers)` or more towers within 1 km, or
   are on the special list.
 - **It splits the villages.** `r pct(type_share[["Small village or hamlet"]])`
   of frame towers are in a small village or hamlet, under
-  `r fmt(DRAFT_B$village_density)` people per km² of land around the church. Only
-  `r pct(p8_of("Small village or hamlet"))` of them have 8 or more bells,
-  against `r pct(p8_of("Village"))` in larger villages.
-- **It matches `r sum(known_b$agree)` of `r nrow(known_b)` known towers.**
-  St Albans and Staines now fall apart as Mark described.
-  `r misses <- known_b$display[!known_b$agree]; if (length(misses) > 0) paste0("Misses: ", paste(misses, collapse = "; "), ".") else ""`
+  `r fmt(DRAFT_C$village_density)` people per km² of land within a short
+  walk. Only `r pct(p8_of("Small village or hamlet"))` of them have 8 or more
+  bells, against `r pct(p8_of("Village"))` in larger villages.
+- **It matches `r sum(known_c$agree)` of `r nrow(known_c)` known towers.**
+  St Albans and Staines fall apart as Mark described.
+  `r misses <- known_c$display[!known_c$agree]; if (length(misses) > 0) paste0("Misses: ", paste(misses, collapse = "; "), ".") else ""`
 
 ## How 1988 classified places
 
@@ -468,7 +531,7 @@ access can be studied separately.
 for the Australian and US towers. Taken cell by cell, each tower simply
 takes the class of the 1 km cell it falls in, so a tower near a cell edge
 can take a class that does not match its own street. Its urban centres,
-traced as whole patches, are more robust, and Draft B uses them. This
+traced as whole patches, are more robust, and Draft C uses them. This
 project uses its GHSL implementation (the EU's Global Human Settlement
 Layer, 2020 epoch).
 
@@ -546,25 +609,66 @@ knows and by comparison with 1988:
 - *A wide-area line is arbitrary.* Small moves in it moved hundreds of
   towers between classes.
 
-## Draft B: start from the settlement the tower stands in
+## Draft B, and where it ran aground
+
+**What it did** (D-029 to D-036). Draft B kept what Draft A lacked: it
+started from the settlement the tower stands in. A tower in a continuous
+built-up area of 50,000 or more was in that city or conurbation; elsewhere,
+people per km² of land on a 500 m kernel made it a town (420 or more), a
+village (200 to 420), or a small village or hamlet.
+
+**Where it ran aground: finding centres.** Inside a city, Draft B had to say
+which towers are at its centre and which in its suburbs, and nothing it
+measured could do that well.
+
+- *Population density cannot find a town centre.* Centres are short of
+  residents, because shops and offices have replaced homes. Density lines
+  made Wolverhampton's collegiate church, the minsters of Halifax, Rotherham
+  and Hull, and many cathedrals into suburbs. Inside a conurbation they
+  judged a town like Wolverhampton against the whole West Midlands, and
+  London's average density was so far above any other city's that London
+  needed a rule of its own.
+- *The non-residential share of buildings did better, but not well enough*
+  (D-036). A centre is where a town's shops and offices are, so the share
+  of buildings that are not homes should find it. It did find most centres,
+  but town centres absorbed into a larger built-up area fell short of that
+  area's share (Stockport, Epsom, Pontefract, Leyland), and suburban churches
+  next to an industrial estate came out central (Brockworth). The satellite
+  layer it uses measures the ground buildings cover, so it cannot tell a
+  high street from a warehouse.
+
+**And a second problem: villages made into towns.** A 500 m kernel weighs
+in people well over a kilometre away. Near a town, it counts the town's
+edge as part of the village: Datchworth and Tewin, small Hertfordshire
+villages a mile or two from Welwyn and Welwyn Garden City, came out as
+towns. Draft B's check against the international urban clusters did not
+catch this, because those clusters join such villages to the town next
+door (see *Why the 250 m kernel*, below).
+
+Draft C keeps Draft B's frame, and fixes both: centres by their high
+streets, towns and villages by the walkable population.
+
+## Draft C: start from the settlement, find its high streets
 
 **The rules.**
 
 *Outside a continuous built-up area of 50,000 or more*, the density of
-people around the church decides:
+people within a short walk of the church decides:
 
 | Type | Rule |
 | --- | --- |
-| Town | At least `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
-| Village | `r fmt(DRAFT_B$village_density)` to `r fmt(DRAFT_B$town_density)` people per km² of land around the church |
-| Small village or hamlet | Under `r fmt(DRAFT_B$village_density)` people per km² of land around the church |
+| Town | At least `r fmt(DRAFT_C$town_density)` people per km² of land |
+| Village | `r fmt(DRAFT_C$village_density)` to `r fmt(DRAFT_C$town_density)` people per km² of land |
+| Small village or hamlet | Under `r fmt(DRAFT_C$village_density)` people per km² of land |
 
 *Inside one*, the tower is in a **centre** if either holds:
 
-- the buildings around the church are at least as commercial as its
-  built-up area as a whole: the non-residential share of the built-up
-  surface around the church is at least the area's own share;
-- it stands among old churches: `r fmt(DRAFT_B$old_centre_towers)` or more
+- it is on or near a high street: within `r DRAFT_C$centre_retail_m` m of
+  a retail centre of District Centre size or larger (below). Abroad, where
+  retail centres are not mapped, the buildings around the church must
+  instead be at least as commercial as its built-up area as a whole: the
+  non-residential share of the built-up surface, as in Draft B;
+- it stands among old churches: `r fmt(DRAFT_C$old_centre_towers)` or more
   towers within 1 km, itself included.
 
 If that leaves a built-up area with no centre at all, its most densely
@@ -573,26 +677,41 @@ is in a **suburb**. The size of the built-up area names the type:
 
 | Type | Built-up area |
 | --- | --- |
-| City or large town: centre, or suburb | `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
-| Conurbation: centre, or suburb | `r fmt(DRAFT_B$conurbation_pop)` people or more |
+| City or large town: centre, or suburb | `r fmt(50000)` to `r fmt(DRAFT_C$conurbation_pop)` people |
+| Conurbation: centre, or suburb | `r fmt(DRAFT_C$conurbation_pop)` people or more |
 
 *On top of its type*, a tower is flagged as in a **tower cluster** if it has
-`r fmt(DRAFT_B$cluster_towers)` or more towers within 1 km, itself included,
+`r fmt(DRAFT_C$cluster_towers)` or more towers within 1 km, itself included,
 or is on the special list as a society tower.
 
-"Around the church" means the `r measure_label(LOCAL_VAR)`: nearer cells
-counting more. Population is divided by the land the kernel covers, so the sea
-does not count as empty country. The international Degree of Urbanisation's
-lines are 300 people per km² (a cluster, rural or urban) and 1,500 (an urban
-centre), in the same units.^[Whether the Degree of Urbanisation divides by
-land or by the whole 1 km cell has not been checked here. Inland the two are
-the same.] Buildings come from the EU's Global Human Settlement Layer:
-built-up surface per 100 m cell, and its non-residential part (shops,
-offices, schools, hospitals, industry).
+**The measures.**
 
-An **urban centre** is a continuous built-up area, traced on the Degree of
-Urbanisation's 1 km grid with its own rules: cells of at least 1,500 people
-per km², joined edge to edge, totalling at least 50,000 people.
+- "Within a short walk" is the `r measure_label(LOCAL_VAR)`: the weight
+  halves every 250 m, so it counts the people a few minutes' walk from the
+  church. Population is divided by the land the kernel covers, so the sea
+  does not count as empty country. The international Degree of
+  Urbanisation's lines are 300 people per km² (a cluster, rural or urban)
+  and 1,500 (an urban centre), in the same units.^[Whether the Degree of
+  Urbanisation divides by land or by the whole 1 km cell has not been
+  checked here. Inland the two are the same.]
+- An **urban centre** is a continuous built-up area, traced on the Degree of
+  Urbanisation's 1 km grid with its own rules: cells of at least 1,500 people
+  per km², joined edge to edge, totalling at least 50,000 people.
+- **Retail centres** are the CDRC's Retail Centre Boundaries for the UK
+  (Open Government Licence; Goodwin and others, below): the outline of
+  every cluster of shops, traced from Foursquare's business listings and
+  OpenStreetMap land use, with candidate centres in "office parks, business
+  trading estates and logistics facilities" removed. Each centre is classed
+  by its rank within its region, local authority and built-up area, and by
+  its number of retail units. Draft C ranks the high-street classes from
+  Regional Centre (1), through Major Town Centre (2), Town Centre and Market
+  Town (3), to District Centre (4), Local Centre (5) and Small Local Centre
+  (6). Retail parks and shopping centres are left out: they are out-of-town
+  destinations, not the centre of a place. A church inside an outline is at
+  distance 0.
+- **Buildings**, used abroad, come from the EU's Global Human Settlement
+  Layer: built-up surface per 100 m cell, and its non-residential part
+  (shops, offices, schools, hospitals, industry).
 
 **Where each line comes from.** All are provisional, and the sensitivity
 tables below show what moving them does.
@@ -600,108 +719,169 @@ tables below show what moving them does.
 - *Urban centre, 50,000 people:* the international definition, unchanged.
   Following the continuous built-up area is what separates St Albans, a city
   with its own centre, from Staines, which is part of London's.
-- *Conurbation, `r fmt(DRAFT_B$conurbation_pop)` people:* set in a gap in
+- *Conurbation, `r fmt(DRAFT_C$conurbation_pop)` people:* set in a gap in
   the sizes of urban centres, so that a small change in the data cannot move
   a city across it (the table below lists the centres either side). It takes
   in London and the large metropolitan areas, which 1988 called the "major
   conurbations", and Bristol, as Mark wanted.
-- *Centre, at least the town's own non-residential share* (Mark, 11
-  October): no number to choose. Each town is compared with itself, so a
-  small market town and London are judged the same way.
-- *Old centre, `r fmt(DRAFT_B$old_centre_towers)` towers within 1 km:*
+- *Centre, a District Centre or larger within `r DRAFT_C$centre_retail_m` m:*
+  District Centres count because of how the CDRC ranks. A centre that does
+  not lead its local authority or built-up area cannot be a Town Centre or
+  Market Town, however old: such "sub-leading centres of comparable size"
+  are District Centres, with at least 150 retail units. Old towns inside a
+  larger authority or built-up area, among them Warwick and Dudley, are
+  therefore District Centres; leaving them out would make those churches
+  suburbs. Local Centres (100 to 150 units) are left out because many
+  suburbs have a high street of that size. 250 m is a few
+  minutes' walk from the edge of the high street. The table below compares
+  the alternatives.
+- *Old centre, `r fmt(DRAFT_C$old_centre_towers)` towers within 1 km:*
   keeps old centres of churches central, such as Gloucester's, whatever is
   built round them.
-- *Tower cluster, `r fmt(DRAFT_B$cluster_towers)` towers within 1 km*
+- *Tower cluster, `r fmt(DRAFT_C$cluster_towers)` towers within 1 km*
   (Mark, 11 October): towers close enough to walk between, so one band can
   ring several in a morning when service times allow. Counting towers, not
   bells, keeps ring size out (D-028). Counting the tower itself means towers
   all within 1 km of each other share one count, so a cluster is never split
   by its own rings: all five Norwich towers, Mancroft included, are in it.
-- *Town, `r fmt(DRAFT_B$town_density)` people per km² of land:* the line
-  that best matches 1988's share of towns. It sits between the international
-  cluster line (300) and urban-centre line (1,500).
-- *Village, `r fmt(DRAFT_B$village_density)` people per km² of land:* below
-  it are hamlets, and villages small enough to struggle for a band. The
-  international cluster density of 300 is measured cell by cell; a 500 m
-  kernel spreads a compact village over its fields, so the equivalent line
-  is lower. 200 keeps about the same number of small villages and hamlets
-  as the international 300 did on the tighter 250 m kernel.
+- *Town, `r fmt(DRAFT_C$town_density)` people per km² of land:* close to the
+  line that best matches 1988's share of towns
+  (`r if (line_88 == DRAFT_C$town_density) "it is that line" else paste0(fmt(line_88), " on the same kernel")`).
+  It sits between the international cluster line (300) and urban-centre
+  line (1,500).
+- *Village, `r fmt(DRAFT_C$village_density)` people per km² of land*
+  (Mark, 11 October): below it are hamlets, and villages small enough to
+  struggle for a band. The line is there so that "village" is not one
+  monolithic class, not to mark a natural break. The international cluster
+  line (300) would put
+  `r pct(mean(reclass(frame_towers, village_density = 300) == "Small village or hamlet"))`
+  of frame towers in small villages and hamlets and only
+  `r pct(mean(reclass(frame_towers, village_density = 300) == "Village"))`
+  in villages, so the larger type would carry the smaller name. At
+  `r fmt(DRAFT_C$village_density)` the two are
+  `r pct(type_share[["Small village or hamlet"]])` and
+  `r pct(type_share[["Village"]])`.
 
 ### How centres are found
 
-**Why not population density.** The first versions found centres by density:
-a tower denser than its town was central. Town centres are short of
-residents, because shops and offices have replaced homes, so density made
-many of them suburbs, among them Wolverhampton's collegiate church and the
-minsters of Halifax, Rotherham and Hull. Inside a conurbation it judged a
-town like Wolverhampton against the whole West Midlands. And London's
-average density is so far above any other city's that London needed a rule
-of its own.
-
-**What is built there.** A centre is where a town's shops and offices are.
-The non-residential share of the buildings round the church measures that
-directly, compared with the same share for the whole built-up area. The table
-compares it with two other measures on the same test cases: churches at the
-heart of their towns, and churches in suburbs.
+The test cases were chosen before either rule was settled: churches at the
+heart of their towns, and churches in suburbs. The first three rules compare
+the area round the church with its own built-up area as a whole; the rest
+use the retail centres. The shares are of comparable towers in 1988's three
+urban types (1988 itself: Large City 6%, Suburban 11%, Inner City 2%).
 
 ```{r}
 #| label: tbl-centre-test
 centre_test |>
-  knitr::kable(caption = paste0("Three ways of finding centres, each compared with the tower's own built-up area: test centres (", sum(is_test_centre), ") and test suburbs (", sum(is_test_suburb), ") misplaced"))
+  dplyr::mutate(`known towers agreeing` = paste(known_by_rule, "of", nrow(known_c))) |>
+  knitr::kable(caption = paste0("Seven ways of finding centres: shares of comparable towers in 1988's urban types, test centres (", sum(is_test_centre), ") and test suburbs (", sum(is_test_suburb), ") misplaced, and known towers agreeing"))
 ```
 
-**What the table shows.** The non-residential share misplaces by far the
-fewest test centres. A blend of homes and other buildings (the share of land
-built on) does worse, because a dense suburb of terraces is as built-up as a
-town centre. The non-residential share does make more test suburbs central,
-but most of them sit right on the line (Barnwood, Quedgeley and St Albans
-S Stephen are within 2% of it), and one, Dunstable, has a town centre of
-its own.
-London needs no exception: its average non-residential share is not inflated
-the way its density is, so Watford, Kingston and Croydon are centres while
-Staines, Wimbledon and Eltham are suburbs.
+**What the table shows.**
+
+- *Density is the worst guide to a centre*, as Draft B found: it makes
+  `r ct("People per km² of land, against its built-up area's", "centres made suburbs")`
+  of the test centres into suburbs.
+- *Retail centres do best on the test cases.* A District Centre or larger
+  within `r DRAFT_C$centre_retail_m` m misplaces the fewest test towers of
+  any rule that keeps all `r nrow(known_c)` known towers right, and its
+  shares of 1988's urban types are close to 1988's.
+- *Town Centres alone are too strict.* The CDRC classes some old town
+  centres inside larger built-up areas as District Centres, so Warwick and
+  Dudley become suburbs.
+- *400 m is too generous.* It recovers two more test centres, but makes
+  Staines `r tolower(staines_at("District Centre or larger within 400 m"))`,
+  where Mark knows it as suburban.
+- *Counting Local Centres too is a close call.* On the test cases it does
+  as well (`r ct("Local Centre or larger within 250 m", "centres made suburbs")`
+  centres and `r ct("Local Centre or larger within 250 m", "suburbs made centres")`
+  suburbs misplaced), but it makes `r n_extra_local` more towers central
+  and moves the suburban share further from 1988's. The extra towers are a
+  mix: small towns swallowed by a larger built-up area (Colne, Bedworth,
+  Elland, Willenhall) and suburbs round an old village high street (Cheam,
+  Jesmond, Stoke Newington, Westbury on Trym). The test suburbs were picked
+  as plainly suburban, so they cannot settle it. Draft C keeps the stricter
+  rule.
 
 **Its weak points.**
 
-- *Absorbed town centres.* A town centre inside a larger built-up area is
-  compared with that whole area, and can fall short: Stockport, Epsom,
-  Pontefract and Leyland come out as suburbs.
-- *Old towns whose shopping moved.* Hastings All Saints, in the Old Town,
-  falls short of the town's modern centre.
-- *Industrial estates* count as non-residential, so a suburban church beside
-  one can come out central (Brockworth).
-- *Footprint, not floor space.* The layer measures the ground buildings
-  cover, so a tall office block counts no more than a shed of the same
-  footprint.
+- *Churches set back from the high street.*
+  `r ct(CHOSEN_RULE, "the centres")` stand more than
+  `r DRAFT_C$centre_retail_m` m from a District Centre or larger: the
+  shopping has moved away from the old church (Hastings Old Town), or the
+  CDRC files the place's high street as a smaller centre. One is arguably a
+  mislabelled test case: Stockport's market-place church, S Mary, is a
+  centre; S George stands about a kilometre out, on Buxton Road.
+- *Suburbs with a large high street of their own*
+  (`r ct(CHOSEN_RULE, "the suburbs")`): these are arguably centres. Dunstable
+  is a town in its own right, joined to Luton's built-up area.
+- *UK only.* Abroad the non-residential share decides, with its known
+  weaknesses. `r pct(mean(!dplyr::coalesce(frame_towers$retail_covered, FALSE)))`
+  of frame towers are outside the CDRC's coverage.
+- *A snapshot.* The boundaries come from recent business listings, and
+  high streets change slowly, but they do change. A newer release should
+  be checked before the draw.
 
-### Why the 500 m kernel for towns
+### Why the 250 m kernel for towns and villages
 
 **The principle** (Mark, 11 October). The types describe places as they are
-today, for today's bands. The scale that best fits ring size (a 250 m
-kernel, in the chapter *What the bells remember*) reflects the places the
-bells were cast for, and choosing a scale because it fits ring size would
-bring ring size into the classification by the back door (D-028).
+today, for today's bands. The question for a village is how many people live
+close enough to walk to its church, not how many live within a few miles.
 
-Widening a kernel costs most where places are small and separate. In the
-countryside, a town of 4,000 people covers about a square kilometre, so a
-wide kernel mostly measures fields and the next villages, and the town
-disappears. The table checks each scale against the contiguous urban
-clusters, which are traced without any kernel.
+**Why Draft B chose 500 m, and why that check misled.** Draft B checked
+each scale against the international urban clusters (contiguous patches of
+300 people per km² or more, totalling 5,000+), which are traced without any
+kernel. Each kernel's town line is set to match 1988's share of towns:
 
 ```{r}
 #| label: tbl-town-scale
 town_scale |>
   dplyr::transmute(kernel = .data$kernel,
-                   `town line (people per km² of land)` = fmt(.data$line),
+                   `town line matching 1988 (people per km² of land)` = fmt(.data$line),
                    `"Town" agrees with being in an urban cluster` = pct(.data$agree)) |>
-  knitr::kable(caption = "Towns at four scales, each line set to match 1988's share of towns: agreement with the contiguous urban clusters (5,000+ people), British Isles frame towers outside urban centres")
+  knitr::kable(caption = "Towns at four scales: agreement with the contiguous urban clusters (5,000+ people), British Isles frame towers outside urban centres")
 ```
 
-**What the table shows.** The 500 m kernel agrees best. The 2 km kernel
-agrees worst: it demotes free-standing market towns such as Cirencester and
-promotes villages on the edge of larger towns, while still matching 1988's
-total share of towns. A matching total says little about whether the right
-towers are in each type.
+Wider kernels do well on this test, but the test rewards blurring. Urban
+clusters are traced on 1 km cells joined corner to corner, so a village
+whose cells touch a town's joins its cluster: the cluster that takes in
+Codicote and Tewin is London's, with millions of people. A
+kernel that also blurs the village into the town agrees with the cluster,
+for the same wrong reason.
+
+```{r}
+#| label: tbl-herts
+herts |>
+  dplyr::transmute(tower = .data$display,
+                   `250 m` = fmt(.data$density_land_k250m),
+                   `500 m` = fmt(.data$density_land_k500m),
+                   `1 km` = fmt(.data$density_land_k1km),
+                   `2 km` = fmt(.data$density_land_k2km),
+                   `urban cluster (people)` = ifelse(is.na(.data$urban_pop), "none", fmt(.data$urban_pop)),
+                   `Draft C` = as.character(.data$type)) |>
+  knitr::kable(caption = "Three Hertfordshire villages and Welwyn: people per km² of land on each kernel")
+```
+
+**What the villages show.** Within a short walk, Datchworth and Tewin are
+villages, and Codicote, a large village with a high street of its own, is
+a town. From 500 m outwards, the edges of Welwyn and Welwyn Garden City are
+counted in: Datchworth and Tewin rise above Draft B's town line, while
+Welwyn itself, a compact old town, falls. People who know them call
+Datchworth and Tewin villages.
+
+**What the bands show.** In the Gloucester & Bristol register, the 250 m
+kernel is also the scale at which density best separates towers with a band
+from towers without one, and the fit worsens steadily as the kernel widens
+(chapter *Towers and the places they stand in*). This is one Association,
+and the scale was chosen partly on it, so the census's own data should
+re-test it.
+
+**What the wider density still tells.** Two villages of the same size can be
+alone in open country or a mile from a town. The density beyond a short walk
+(`beyond_walk`, the people between the 250 m and 2 km kernels per km² of
+their land) measures that. It is not a type: in the register it added
+nothing to the walkable density. It sorts the draw within each stratum, so
+the sample spreads from isolated villages to those near towns.
 
 ### How the shares compare with 1988
 
@@ -712,23 +892,23 @@ shares_vs_1988 |>
     `1988 type` = .data$type_1988,
     `1988 (inferred)` = ifelse(pct(.data$share_lo) == pct(.data$share_hi), pct(.data$share_best), paste0(pct(.data$share_best), " (", pct(.data$share_lo), "–", pct(.data$share_hi), ")")),
     `Draft A` = pct(.data$draft_a),
-    `Draft B` = pct(.data$draft_b)
+    `Draft C` = pct(.data$draft_c)
   ) |>
   knitr::kable(caption = paste0("Shares of towers by 1988 type: 1988 inferred, against both drafts on comparable towers (British Isles frame, five or more bells, n = ", fmt(nrow(comparable_1988)), ")"))
 ```
 
-Draft B maps onto 1988's types as follows: both village types to Village;
+Draft C maps onto 1988's types as follows: both village types to Village;
 Town to Town; a city or large town's centre to Large City; either kind of
 suburb to Suburban; a conurbation's centre to Inner City; and any tower in a
 tower cluster to Large City, because 1988's "Large City" was the type of the
 great city-centre churches: the most ringers per bell, and the most Surprise
 ringing.
 
-**Where Draft B still differs from 1988.** Two gaps remain.
+**Where Draft C still differs from 1988.** Two gaps remain.
 
-- *Towns and villages.* `r if (line_88 == DRAFT_B$town_density) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " per km² would match 1988's share.")`
-- *Fewer suburbs.* Draft B has fewer suburban towers than 1988. 1988 may
-  have counted some fringe towns as suburban; and Draft B makes every
+- *Towns and villages.* `r if (line_88 == DRAFT_C$town_density) "The town line was chosen to match 1988's share of towns, so this gap is closed by construction. That makes the match a choice, not evidence that the two schemes place the same towers alike." else paste0("1988 seems to have called more places towns. A town line of ", fmt(line_88), " per km² would match 1988's share.")`
+- *Fewer suburbs.* Draft C has fewer suburban towers than 1988. 1988 may
+  have counted some fringe towns as suburban; and Draft C makes every
   settlement's densest tower a centre where nothing else qualifies.
 
 ```{r}
@@ -743,7 +923,7 @@ frame_towers |>
     .by = "type"
   ) |>
   dplyr::arrange(.data$type) |>
-  knitr::kable(caption = "Draft B types, all frame towers")
+  knitr::kable(caption = "Draft C types, all frame towers")
 ```
 
 ### Independent checks
@@ -756,7 +936,7 @@ types mean something, both should still change steadily from type to type.
 ring_check |>
   dplyr::mutate(`rings of 8 or more` = pct(.data$p8)) |>
   dplyr::select(-"p8") |>
-  knitr::kable(caption = "Ring size and growth since the bells, by Draft B type (neither is used to classify)")
+  knitr::kable(caption = "Ring size and growth since the bells, by Draft C type (neither is used to classify)")
 ```
 
 **What the checks show.** Rings of 8 or more rise from
@@ -776,16 +956,19 @@ compares that with the rules.
 
 ```{r}
 #| label: tbl-known
-known_b |>
+known_c |>
   dplyr::transmute(
     tower = .data$display,
     `feels like` = .data$feels_like,
-    `Draft B` = as.character(.data$type),
+    `Draft C` = as.character(.data$type),
     match = ifelse(.data$agree, "yes", "**no**"),
     `Draft A` = as.character(.data$type_a),
     `people within 500 m` = fmt(.data$pop_r500m),
-    `people per km² of land around the church` = fmt(.data[[LOCAL_VAR]]),
-    `non-residential share, against its built-up area's` = round(.data$nres_ratio, 2),
+    `people per km² of land within a short walk` = fmt(.data[[LOCAL_VAR]]),
+    `nearest retail centre` = ifelse(is.na(.data$retail_nearest_name), "",
+                                     paste0(sub(";.*$", "", .data$retail_nearest_name), " (", .data$retail_nearest_class, ", ",
+                                            fmt(.data$retail_nearest_m), " m)")),
+    `District Centre or larger (m)` = fmt(.data$retail_d_t4_m),
     `tower cluster` = ifelse(.data$tower_cluster, "yes", ""),
     `urban centre (people)` = ifelse(is.na(.data$centre_pop), "none", fmt(.data$centre_pop)),
     `nearest urban centre (km)` = round(.data$centre_dist_km, 1),
@@ -839,7 +1022,7 @@ centre_names <- towers |>
   dplyr::left_join(dplyr::distinct(dplyr::select(towers, "centre_key", "centre_pop")), by = "centre_key")
 centre_table <- function(d) d |>
   dplyr::arrange(dplyr::desc(.data$centre_pop)) |>
-  dplyr::mutate(side = ifelse(.data$centre_pop >= DRAFT_B$conurbation_pop,
+  dplyr::mutate(side = ifelse(.data$centre_pop >= DRAFT_C$conurbation_pop,
                               "conurbation", "city or large town"),
                 people = fmt(.data$centre_pop))
 ```
@@ -848,12 +1031,12 @@ centre_table <- function(d) d |>
 #| label: tbl-centres-uk
 centre_names |>
   dplyr::filter(.data$uk,
-                .data$centre_pop >= DRAFT_B$conurbation_pop / 2,
-                .data$centre_pop <= DRAFT_B$conurbation_pop * 2) |>
+                .data$centre_pop >= DRAFT_C$conurbation_pop / 2,
+                .data$centre_pop <= DRAFT_C$conurbation_pop * 2) |>
   centre_table() |>
   dplyr::select(`frame towers include` = "towers_include", "people", "frame towers", "side") |>
   knitr::kable(caption = paste0("UK urban centres between half and twice the conurbation line of ",
-                                fmt(DRAFT_B$conurbation_pop), " people"))
+                                fmt(DRAFT_C$conurbation_pop), " people"))
 ```
 
 ```{r}
@@ -874,7 +1057,7 @@ clusters <- frame_towers |>
   dplyr::filter(.data$tower_cluster) |>
   dplyr::mutate(place = sub(",.*$", "", .data$display),
                 place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place),
-                by = ifelse(.data$towers_1km >= DRAFT_B$cluster_towers, "measure", "list only"))
+                by = ifelse(.data$towers_1km >= DRAFT_C$cluster_towers, "measure", "list only"))
 clusters |>
   dplyr::summarise(towers = dplyr::n(),
                    `found by the measure` = sum(.data$by == "measure"),
@@ -926,13 +1109,14 @@ frame_towers |>
   dplyr::mutate(place = sub(",.*$", "", .data$display),
                 place = sub(" (Cath|Minster|Abbey|Priory|Collegiate)\\b.*$", "", .data$place)) |>
   dplyr::filter(.data$place %in% test_places) |>
-  dplyr::arrange(.data$centre_pop, dplyr::desc(.data$nres_ratio)) |>
+  dplyr::arrange(.data$centre_pop, .data$retail_d_t4_m) |>
   dplyr::transmute(`built-up area (people)` = fmt(.data$centre_pop), tower = .data$display,
-                   `non-residential share` = pct(.data[[NRES_VAR]]),
-                   `its built-up area's` = pct(.data$centre_nres_share),
-                   ratio = round(.data$nres_ratio, 2),
+                   `nearest retail centre` = paste0(sub(";.*$", "", .data$retail_nearest_name), " (",
+                                                    .data$retail_nearest_class, ")"),
+                   `District Centre or larger (m)` = fmt(.data$retail_d_t4_m),
+                   `non-residential ratio` = round(.data$nres_ratio, 2),
                    `towers within 1 km` = .data$towers_1km,
-                   `Draft B` = as.character(.data$type),
+                   `Draft C` = as.character(.data$type),
                    cluster = ifelse(.data$tower_cluster, "yes", "")) |>
   knitr::kable(caption = "Test cases: towers in built-up areas, with the measures behind centre and suburb")
 ```
@@ -941,8 +1125,9 @@ frame_towers |>
 #| label: tbl-fallback
 fallback <- frame_towers |>
   dplyr::filter(!is.na(.data$centre_pop)) |>
-  dplyr::mutate(by_rule = dplyr::coalesce(.data$nres_ratio >= DRAFT_B$centre_nres_ratio, FALSE) |
-                  .data$towers_1km >= DRAFT_B$old_centre_towers) |>
+  dplyr::mutate(by_rule = dplyr::coalesce(.data$retail_near,
+                                          .data$nres_ratio >= DRAFT_C$centre_nres_ratio, FALSE) |
+                  .data$towers_1km >= DRAFT_C$old_centre_towers) |>
   dplyr::filter(.data$british_isles) |>
   dplyr::summarise(rule_finds_centre = any(.data$by_rule),
                    place = sub(",.*$", "", .data$display[which.max(.data[[LOCAL_VAR]])]),
@@ -956,44 +1141,61 @@ rule finds no centre, so the most densely populated tower is its centre.
 Most are towns with one or two towers, such as
 `r paste(utils::head(fallback$place[order(-fallback$people)], 5), collapse = ", ")`.
 The fallback picks by residents, so where a town's old centre is empty it
-can pick a suburb instead.
+can pick a suburb instead. In the UK, a built-up area that reaches this
+fallback usually has no high street of District Centre size near any of its
+towers.
 
 ### How sensitive the types are to each line
 
 ```{r}
 #| label: tbl-sens-town
-purrr::map(sort(unique(c(300, 350, DRAFT_B$town_density, 500, 600))), \(t)
+purrr::map(sort(unique(c(400, 500, DRAFT_C$town_density, 700, 800))), \(t)
   frame_towers |> dplyr::mutate(type = reclass(frame_towers, town_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different town lines (people per km² of land around the church)")
+  knitr::kable(caption = "Frame towers per type at different town lines (people per km² of land within a short walk)")
 ```
 
 ```{r}
 #| label: tbl-sens-village
-purrr::map(sort(unique(c(100, 150, DRAFT_B$village_density, 300))), \(t)
+purrr::map(sort(unique(c(150, DRAFT_C$village_density, 250, 300, 400))), \(t)
   frame_towers |> dplyr::mutate(type = reclass(frame_towers, village_density = t)) |>
     dplyr::count(.data$type) |> dplyr::mutate(line = fmt(t))) |>
   purrr::list_rbind() |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different village lines (people per km² of land around the church)")
+  knitr::kable(caption = "Frame towers per type at different village lines (people per km² of land within a short walk)")
 ```
 
 ```{r}
 #| label: tbl-sens-urban
 dplyr::bind_rows(
-  purrr::map(sort(unique(c(250000, 500000, DRAFT_B$conurbation_pop, 1000000))), \(t)
+  purrr::map(sort(unique(c(250000, 500000, DRAFT_C$conurbation_pop, 1000000))), \(t)
     frame_towers |> dplyr::mutate(type = reclass(frame_towers, conurbation_pop = t)) |>
       dplyr::count(.data$type) |> dplyr::mutate(line = paste("conurbation", fmt(t)))) |>
     purrr::list_rbind(),
-  purrr::map(sort(unique(c(0.8, DRAFT_B$centre_nres_ratio, 1.2, 1.5))), \(t)
+  purrr::map(sort(unique(c(0.8, DRAFT_C$centre_nres_ratio, 1.2))), \(t)
     frame_towers |> dplyr::mutate(type = reclass(frame_towers, centre_nres_ratio = t)) |>
-      dplyr::count(.data$type) |> dplyr::mutate(line = paste("centre ratio", t))) |>
+      dplyr::count(.data$type) |> dplyr::mutate(line = paste("ratio abroad", t))) |>
     purrr::list_rbind()
 ) |>
   tidyr::pivot_wider(names_from = "line", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Frame towers per type at different conurbation sizes (people), and different centre ratios (non-residential share against the built-up area's)")
+  knitr::kable(caption = "Frame towers per type at different conurbation sizes (people), and different non-residential ratios (used abroad only)")
+```
+
+```{r}
+#| label: tbl-sens-retail
+tidyr::expand_grid(tier = 3:5, m = c(0, 150, 250, 400)) |>
+  purrr::pmap(\(tier, m) frame_towers |>
+    dplyr::mutate(type = reclass(frame_towers, centre_retail_tier = tier, centre_retail_m = m)) |>
+    dplyr::summarise(`centre towers` = sum(grepl("centre", .data$type)),
+                     `suburb towers` = sum(grepl("suburb", .data$type))) |>
+    dplyr::mutate(`retail centres counted` = c("Town Centre or larger", "District Centre or larger",
+                                               "Local Centre or larger")[tier - 2],
+                  `within (m)` = m)) |>
+  purrr::list_rbind() |>
+  dplyr::relocate("retail centres counted", "within (m)") |>
+  knitr::kable(caption = "Frame towers in centres and suburbs, by the retail centres counted and how near the church must be (0: inside the outline)")
 ```
 
 ```{r}
@@ -1001,13 +1203,14 @@ dplyr::bind_rows(
 tibble::tibble(`towers within 1 km` = 3:7) |>
   dplyr::mutate(`frame towers flagged` = purrr::map_int(.data$`towers within 1 km`, \(n)
     sum(tower_cluster(frame_towers$towers_1km, frame_towers$society,
-                      utils::modifyList(DRAFT_B, list(cluster_towers = n)))))) |>
+                      utils::modifyList(DRAFT_C, list(cluster_towers = n)))))) |>
   knitr::kable(caption = "Frame towers in a tower cluster at different lines")
 ```
 
 **What moves and what does not.** The village and town lines trade towers
 between neighbouring rural types, as expected. The urban types depend
-only on the conurbation line and the centre ratio. The total in urban
+only on the conurbation line and the retail rule (the non-residential ratio
+matters only abroad). The total in urban
 centres depends on none of them, because the urban centres themselves are
 fixed by the international definition.
 
@@ -1028,7 +1231,7 @@ frame_towers |>
 ```{r}
 #| label: fig-type-map
 #| fig-height: 9
-#| fig-cap: "Draft B types, Great Britain."
+#| fig-cap: "Draft C types, Great Britain."
 gb <- dplyr::filter(frame_towers, .data$country %in% c("England", "Wales", "Scotland"))
 ggplot(gb, aes(lon, lat, colour = type)) +
   geom_point(size = 0.5, alpha = 0.8) +
@@ -1042,7 +1245,7 @@ ggplot(gb, aes(lon, lat, colour = type)) +
 ```{r}
 #| label: fig-type-zoom
 #| fig-height: 5
-#| fig-cap: "Draft B types around London, the West Midlands and Manchester."
+#| fig-cap: "Draft C types around London, the West Midlands and Manchester."
 zooms <- tibble::tribble(
   ~area,            ~lon_min, ~lon_max, ~lat_min, ~lat_max,
   "London",           -0.55,     0.35,    51.25,    51.85,
@@ -1064,31 +1267,31 @@ ggplot(zoomed, aes(lon, lat, colour = type)) +
   theme(axis.text = element_blank(), panel.grid = element_blank())
 ```
 
-How Draft B lines up with Draft A and the ready-made classifications:
+How Draft C lines up with Draft A and the ready-made classifications:
 
 ```{r}
-#| label: tbl-b-vs-a
+#| label: tbl-c-vs-a
 frame_towers |>
   dplyr::count(.data$type, .data$type_a) |>
   tidyr::pivot_wider(names_from = "type_a", values_from = "n", values_fill = 0) |>
-  knitr::kable(caption = "Draft B (rows) against Draft A (columns), frame towers")
+  knitr::kable(caption = "Draft C (rows) against Draft A (columns), frame towers")
 ```
 
 ```{r}
-#| label: tbl-b-vs-smod
+#| label: tbl-c-vs-smod
 frame_towers |>
   dplyr::count(.data$type, .data$smod_class) |>
   tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Draft B against the international Degree of Urbanisation (the tower's own cell)")
+  knitr::kable(caption = "Draft C against the international Degree of Urbanisation (the tower's own cell)")
 ```
 
 ```{r}
-#| label: tbl-b-vs-ruc
+#| label: tbl-c-vs-ruc
 frame_towers |>
   dplyr::filter(!is.na(.data$ruc21nm)) |>
   dplyr::count(.data$type, .data$ruc21nm) |>
   tidyr::pivot_wider(names_from = "ruc21nm", values_from = "n", values_fill = 0, names_sort = TRUE) |>
-  knitr::kable(caption = "Draft B against the ONS Rural Urban Classification 2021, England and Wales")
+  knitr::kable(caption = "Draft C against the ONS Rural Urban Classification 2021, England and Wales")
 ```
 
 ## Methods and sources
@@ -1110,3 +1313,10 @@ Rural-Urban Classification for Output Areas in England: user guide* (2013).
 
 **Scotland.** Scottish Government, *Urban Rural Classification 2022:
 methodology*.
+
+**Retail centres.** Goodwin, O., Yin, Z., Ye, Z., Singleton, A. and Dolega,
+L., *An Open Framework for Delineating and Classifying Retail Centres across
+the United Kingdom* (working paper, with the data). Retail Centre
+Boundaries (UK), Geographic Data Service / Consumer Data Research Centre,
+https://data.geods.ac.uk/dataset/retail-centre-boundaries, Open Government
+Licence; downloaded 11 October 2026.
