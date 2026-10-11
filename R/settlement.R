@@ -83,28 +83,38 @@ classify_settlement_a <- function(d, pop2, pop5, region, society, th, levels) {
 #'
 #' Place measures only. Built around the question "what sort of place are
 #' these bells in?", in four steps:
-#'   1. Society or city-core towers, by the curated list (Q-022).
-#'   2. Towers inside an urban centre, traced as a contiguous built-up area
-#'      on the Degree of Urbanisation grid (R/contiguity.R). In a conurbation
-#'      (centre of at least th$conurbation_pop people): "Inner city" where the
-#'      local density reaches th$inner_density, otherwise "Suburban". In a
-#'      smaller centre: "City or large town".
+#'   1. Historic city cores: towers inside an urban centre with many other
+#'      towers' bells close by (th$core_other_bells or more within 1 km), plus
+#'      any tower on the curated special list (Q-022) as a backstop. Bands
+#'      there are often shared, so a tower may have no band of its own.
+#'   2. Other towers inside an urban centre, traced as a contiguous built-up
+#'      area on the Degree of Urbanisation grid (R/contiguity.R). In a
+#'      conurbation (centre of at least th$conurbation_pop people): "Inner
+#'      city" where the local density reaches th$inner_density, otherwise
+#'      "Suburban". In a smaller centre: "City or large town".
 #'   3. Other towers by the people within 1 km: "Town" from th$town_pop_1km,
 #'      "Village" from th$village_pop_1km, otherwise "Small village or hamlet".
+#'
+#' Bells enter step 1 only as OTHER towers' bells. A tower's own bells are
+#' excluded, because counting them would tie the class to its own ring size
+#' (D-028): bells within 1 km including the tower's own correlate about 0.9
+#' with its ring size; other towers' bells about 0.2.
 #'
 #' @param centre_pop Population of the urban centre the tower is in (NA if
 #'   none).
 #' @param inner_d Local density used for the inner-city line.
 #' @param pop1k People within 1 km.
-#' @param society Logical: on the special list as a society or city-core tower.
-#' @param th Named list: conurbation_pop, inner_density, town_pop_1km,
-#'   village_pop_1km.
+#' @param other_bells Bells within 1 km at OTHER frame towers.
+#' @param listed Logical: on the special list as a society or city-core tower.
+#' @param th Named list: core_other_bells, conurbation_pop, inner_density,
+#'   town_pop_1km, village_pop_1km.
 #' @param levels Factor levels for the result.
-classify_settlement_b <- function(centre_pop, inner_d, pop1k, society, th, levels) {
+classify_settlement_b <- function(centre_pop, inner_d, pop1k, other_bells, listed, th, levels) {
   in_centre <- !is.na(centre_pop)
   conurb <- in_centre & centre_pop >= th$conurbation_pop
+  core <- listed | (in_centre & other_bells >= th$core_other_bells)
   type <- dplyr::case_when(
-    society                               ~ "Society or city-core tower",
+    core                                  ~ "Historic city core",
     conurb & inner_d >= th$inner_density  ~ "Inner city",
     conurb                                ~ "Suburban",
     in_centre                             ~ "City or large town",
