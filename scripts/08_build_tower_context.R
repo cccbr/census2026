@@ -45,6 +45,15 @@
 #                  People per km2 of land. Comparable across scales, so the
 #                  ratio of a narrow to a wide density measures isolation
 #                  without the sea counting as emptiness.
+#   For each measure <m> in BUILT_MEASURES only (D-036):
+#   built_km2_<m>  Built-up surface (GHS-BUILT-S), weighted by distance, km2.
+#   nres_km2_<m>   Its non-residential part (GHS-BUILT-S NRES), km2.
+#   nres_share_<m> Non-residential share of the built-up surface: high where
+#                  there are shops, offices and other non-residential
+#                  buildings. NA where nothing is built.
+#   centre_built_km2, centre_nres_km2, centre_nres_share
+#                  The same, summed over the tower's whole urban centre, so a
+#                  tower can be compared with its own settlement.
 #
 # Output: data/curated/tower_context_<frame snapshot>.parquet (+ .json sidecar)
 
@@ -55,11 +64,13 @@ library(terra)
 
 # ---- snapshots: named, never discovered -------------------------------------
 
-FRAME_SNAPSHOT     <- "dove_2026-09-19"
-GHSL_POP_SNAPSHOT  <- "ghsl_pop_E2020_2026-10-10"
+FRAME_SNAPSHOT <- "dove_2026-09-19"
+GHSL_POP_SNAPSHOT <- "ghsl_pop_E2020_2026-10-10"
 GHSL_SMOD_SNAPSHOT <- "ghsl_smod_E2020_2026-10-10"
-ONS_RUC_SNAPSHOT   <- "ons_oa_ruc_2026-10-10"
+ONS_RUC_SNAPSHOT <- "ons_oa_ruc_2026-10-10"
 GHSL_LAND_SNAPSHOT <- "ghsl_land_E2018_2026-10-10"
+GHSL_BUILT_SNAPSHOT <- "ghsl_built_E2020_2026-10-11"
+GHSL_NRES_SNAPSHOT <- "ghsl_nres_E2020_2026-10-11"
 
 # ---- OPEN decisions encoded here: do not let these harden silently ----------
 
@@ -90,20 +101,29 @@ GHSL_LAND_SNAPSHOT <- "ghsl_land_E2018_2026-10-10"
 # window per tower, so the new tight measures and the radii cost almost
 # nothing beyond the 2 km kernel, which already reaches about 19 km.
 MEASURES <- tibble::tribble(
-  ~type,    ~param_m, ~pop_res_m,
-  "kernel",   250,     100,
-  "kernel",   500,     100,
-  "kernel",  1000,     100,
-  "kernel",  2000,     100,
-  "kernel",  4000,    1000,
-  "kernel",  8000,    1000,
-  "radius",   500,     100,
-  "radius",  1000,     100,
-  "radius",  2000,     100,
-  "radius",  5000,     100,
-  "radius", 10000,     100
+  ~type    , ~param_m , ~pop_res_m ,
+  "kernel" ,      250 ,        100 ,
+  "kernel" ,      500 ,        100 ,
+  "kernel" ,     1000 ,        100 ,
+  "kernel" ,     2000 ,        100 ,
+  "kernel" ,     4000 ,       1000 ,
+  "kernel" ,     8000 ,       1000 ,
+  "radius" ,      500 ,        100 ,
+  "radius" ,     1000 ,        100 ,
+  "radius" ,     2000 ,        100 ,
+  "radius" ,     5000 ,        100 ,
+  "radius" ,    10000 ,        100
 ) |>
   dplyr::mutate(measure = measure_name(.data$type, .data$param_m), .before = 1)
+
+# Built-up surface is summed for the tight kernels only (D-036): it is used to
+# tell a town's centre from its suburbs, which is a question about the
+# neighbourhood of the church. All at 100 m, so they share one window.
+BUILT_MEASURES <- dplyr::filter(
+  MEASURES,
+  .data$type == "kernel",
+  .data$param_m %in% c(250, 500, 1000)
+)
 
 # Considered and deferred (D-026): a Huff / three-step floating catchment
 # allocation, splitting each population cell among the towers that reach it.
@@ -124,19 +144,22 @@ verify_snapshot <- function(snapshot_id) {
   rows <- read_fetch_log() |>
     dplyr::filter(.data$snapshot_id == !!snapshot_id, .data$http_status == 200)
   stopifnot("snapshot not in fetch log" = nrow(rows) > 0)
-  src  <- rows$source[[1]]
+  src <- rows$source[[1]]
   date <- sub(".*_(\\d{4}-\\d{2}-\\d{2})$", "\\1", snapshot_id)
-  dir  <- snapshot_dir(src, date)
-  purrr::pwalk(rows |> dplyr::select(file, sha256),
-               \(file, sha256) verify_sha256(fs::path(dir, file), sha256))
+  dir <- snapshot_dir(src, date)
+  purrr::pwalk(rows |> dplyr::select(file, sha256), \(file, sha256) {
+    verify_sha256(fs::path(dir, file), sha256)
+  })
   message("Checksums verified for ", snapshot_id)
   list(dir = dir, files = rows$file)
 }
 
-pop_raw  <- verify_snapshot(GHSL_POP_SNAPSHOT)
+pop_raw <- verify_snapshot(GHSL_POP_SNAPSHOT)
 smod_raw <- verify_snapshot(GHSL_SMOD_SNAPSHOT)
-ons_raw  <- verify_snapshot(ONS_RUC_SNAPSHOT)
+ons_raw <- verify_snapshot(ONS_RUC_SNAPSHOT)
 land_raw <- verify_snapshot(GHSL_LAND_SNAPSHOT)
+built_raw <- verify_snapshot(GHSL_BUILT_SNAPSHOT)
+nres_raw <- verify_snapshot(GHSL_NRES_SNAPSHOT)
 
 # Unzip into data/interim/. Raw stays exactly as fetched. Interim is
 # disposable and rebuilt from raw.
@@ -149,30 +172,43 @@ unzip_to_interim <- function(raw, snapshot_id) {
   out
 }
 
-pop_dir  <- unzip_to_interim(pop_raw,  GHSL_POP_SNAPSHOT)
+pop_dir <- unzip_to_interim(pop_raw, GHSL_POP_SNAPSHOT)
 smod_dir <- unzip_to_interim(smod_raw, GHSL_SMOD_SNAPSHOT)
-ons_dir  <- unzip_to_interim(ons_raw,  ONS_RUC_SNAPSHOT)
+ons_dir <- unzip_to_interim(ons_raw, ONS_RUC_SNAPSHOT)
 land_dir <- unzip_to_interim(land_raw, GHSL_LAND_SNAPSHOT)
+built_dir <- unzip_to_interim(built_raw, GHSL_BUILT_SNAPSHOT)
+nres_dir <- unzip_to_interim(nres_raw, GHSL_NRES_SNAPSHOT)
 
 # ---- towers in scope --------------------------------------------------------
 
 frame <- arrow::read_parquet(here::here(
-  "data", "curated", paste0("frame_", FRAME_SNAPSHOT, ".parquet")
+  "data",
+  "curated",
+  paste0("frame_", FRAME_SNAPSHOT, ".parquet")
 ))
 locations <- arrow::read_parquet(here::here(
-  "data", "curated", paste0("tower_locations_", FRAME_SNAPSHOT, ".parquet")
+  "data",
+  "curated",
+  paste0("tower_locations_", FRAME_SNAPSHOT, ".parquet")
 ))
 
 towers <- locations |>
-  dplyr::filter(.data$tower_id %in% context_scope(frame),
-                !is.na(.data$lat), !is.na(.data$lon))
+  dplyr::filter(
+    .data$tower_id %in% context_scope(frame),
+    !is.na(.data$lat),
+    !is.na(.data$lon)
+  )
 
 # Frame towers and their bells: the "competition" in the density measures. The
 # frame is the agreed sampling frame, frame_full (D-017, D-019).
 frame_towers <- frame |>
   dplyr::filter(.data$frame_full) |>
   dplyr::summarise(
-    bells = if (MULTI_RING_BELLS == "max") max(.data$bells) else sum(.data$bells),  # Q-020
+    bells = if (MULTI_RING_BELLS == "max") {
+      max(.data$bells)
+    } else {
+      sum(.data$bells)
+    }, # Q-020
     n_frame_rings = dplyr::n(),
     .by = "tower_id"
   ) |>
@@ -192,8 +228,12 @@ message(nrow(towers), " towers in scope; ", nrow(frame_towers), " frame towers")
 ghsl_tile_extent <- function(f) {
   id <- regmatches(f, regexpr("R\\d+_C\\d+", f))
   rc <- as.integer(regmatches(id, gregexpr("\\d+", id))[[1]])
-  terra::ext(-18041000 + (rc[2] - 1) * 1e6, -18041000 + rc[2] * 1e6,
-             9000000 - rc[1] * 1e6,        9000000 - (rc[1] - 1) * 1e6)
+  terra::ext(
+    -18041000 + (rc[2] - 1) * 1e6,
+    -18041000 + rc[2] * 1e6,
+    9000000 - rc[1] * 1e6,
+    9000000 - (rc[1] - 1) * 1e6
+  )
 }
 
 #' Check a set of GHSL tiles against the grid, and build a 100 m mosaic and a
@@ -216,26 +256,42 @@ tiled_rasters <- function(dir, snapshot_id) {
   stopifnot("no tiles found" = length(tifs) > 0)
 
   purrr::walk(tifs, \(f) {
-    r   <- terra::rast(f)
-    e   <- as.vector(terra::ext(r))
+    r <- terra::rast(f)
+    e <- as.vector(terra::ext(r))
     exp <- as.vector(ghsl_tile_extent(f))
-    inside  <- e[["xmin"]] >= exp[["xmin"]] - 1 && e[["xmax"]] <= exp[["xmax"]] + 1 &&
-               e[["ymin"]] >= exp[["ymin"]] - 1 && e[["ymax"]] <= exp[["ymax"]] + 1
+    inside <- e[["xmin"]] >= exp[["xmin"]] - 1 &&
+      e[["xmax"]] <= exp[["xmax"]] + 1 &&
+      e[["ymin"]] >= exp[["ymin"]] - 1 &&
+      e[["ymax"]] <= exp[["ymax"]] + 1
     on_grid <- all(abs(((e - exp) / 100) - round((e - exp) / 100)) < 1e-6) &&
-               all(abs(terra::res(r) - 100) < 1e-6)
+      all(abs(terra::res(r) - 100) < 1e-6)
     if (!inside || !on_grid) {
-      stop("Tile ", fs::path_file(f), " does not sit inside its GHSL grid square ",
-           "on the 100 m lattice.\n",
-           "  actual:   ", paste(e, collapse = ", "), "\n",
-           "  expected within: ", paste(exp, collapse = ", "), call. = FALSE)
+      stop(
+        "Tile ",
+        fs::path_file(f),
+        " does not sit inside its GHSL grid square ",
+        "on the 100 m lattice.\n",
+        "  actual:   ",
+        paste(e, collapse = ", "),
+        "\n",
+        "  expected within: ",
+        paste(exp, collapse = ", "),
+        call. = FALSE
+      )
     }
   })
 
-  r100 <- terra::vrt(tifs, filename = fs::path(dir, "mosaic_100m.vrt"),
-                     overwrite = TRUE)
+  r100 <- terra::vrt(
+    tifs,
+    filename = fs::path(dir, "mosaic_100m.vrt"),
+    overwrite = TRUE
+  )
 
-  agg_dir <- fs::dir_create(here::here("data", "interim",
-                                       paste0(snapshot_id, "_agg1km")))
+  agg_dir <- fs::dir_create(here::here(
+    "data",
+    "interim",
+    paste0(snapshot_id, "_agg1km")
+  ))
   agg_tifs <- purrr::map_chr(tifs, \(f) {
     out <- fs::path(agg_dir, fs::path_file(f))
     if (!fs::file_exists(out)) {
@@ -245,30 +301,62 @@ tiled_rasters <- function(dir, snapshot_id) {
     }
     out
   })
-  r1k <- terra::vrt(agg_tifs, filename = fs::path(agg_dir, "mosaic_1km.vrt"),
-                    overwrite = TRUE)
+  r1k <- terra::vrt(
+    agg_tifs,
+    filename = fs::path(agg_dir, "mosaic_1km.vrt"),
+    overwrite = TRUE
+  )
 
   list(`100` = r100, `1000` = r1k, first_tile = tifs[[1]])
 }
 
-pop_raster  <- tiled_rasters(pop_dir,  GHSL_POP_SNAPSHOT)
+pop_raster <- tiled_rasters(pop_dir, GHSL_POP_SNAPSHOT)
 land_raster <- tiled_rasters(land_dir, GHSL_LAND_SNAPSHOT)
+built_raster <- tiled_rasters(built_dir, GHSL_BUILT_SNAPSHOT)
+nres_raster <- tiled_rasters(nres_dir, GHSL_NRES_SNAPSHOT)
+
+# GHS-BUILT-S is square metres of built-up surface per 100 m cell, so at most
+# 10,000. Check rather than assume; and the non-residential part can never
+# exceed the total.
+built_max <- terra::global(
+  terra::rast(built_raster$first_tile),
+  "max",
+  na.rm = TRUE
+)[[1]]
+if (built_max > 1e4 + 1 || built_max < 100) {
+  stop(
+    "GHS-BUILT-S maximum per 100 m cell is ",
+    built_max,
+    "; expected square metres (up to 10,000). Check the unit before going on.",
+    call. = FALSE
+  )
+}
 
 # GHS-LAND's unit is checked, not assumed. Per 100 m cell it is either land
 # area in m2 (0-10,000) or a land fraction (0-1). The maximum over a tile with
 # open country tells them apart. Anything else stops the script.
-land_max <- terra::global(terra::rast(land_raster$first_tile), "max", na.rm = TRUE)[[1]]
+land_max <- terra::global(
+  terra::rast(land_raster$first_tile),
+  "max",
+  na.rm = TRUE
+)[[1]]
 land_to_km2 <- dplyr::case_when(
-  abs(land_max - 1e4) < 1   ~ 1e-6,   # m2 per cell  -> km2
-  abs(land_max - 1)   < 1e-6 ~ 0.01,  # fraction     -> km2 (cell is 0.01 km2)
+  abs(land_max - 1e4) < 1 ~ 1e-6, # m2 per cell  -> km2
+  abs(land_max - 1) < 1e-6 ~ 0.01, # fraction     -> km2 (cell is 0.01 km2)
   TRUE ~ NA_real_
 )
 if (is.na(land_to_km2)) {
-  stop("GHS-LAND maximum per 100 m cell is ", land_max,
-       "; expected 10000 (m2) or 1 (fraction). Check the unit before going on.",
-       call. = FALSE)
+  stop(
+    "GHS-LAND maximum per 100 m cell is ",
+    land_max,
+    "; expected 10000 (m2) or 1 (fraction). Check the unit before going on.",
+    call. = FALSE
+  )
 }
-message("GHS-LAND unit: ", if (land_to_km2 == 1e-6) "m2 per cell" else "fraction per cell")
+message(
+  "GHS-LAND unit: ",
+  if (land_to_km2 == 1e-6) "m2 per cell" else "fraction per cell"
+)
 
 # ---- SMOD: Degree of Urbanisation at the tower's cell -----------------------
 #
@@ -276,12 +364,15 @@ message("GHS-LAND unit: ", if (land_to_km2 == 1e-6) "m2 per cell" else "fraction
 # with a boundary file shows up in seconds, not after 15 minutes.
 
 smod <- terra::rast(fs::dir_ls(smod_dir, recurse = TRUE, glob = "*.tif"))
-pts  <- terra::vect(towers, geom = c("lon", "lat"), crs = "OGC:CRS84")
+pts <- terra::vect(towers, geom = c("lon", "lat"), crs = "OGC:CRS84")
 
 site <- towers |>
   dplyr::select("tower_id") |>
   dplyr::mutate(
-    smod_code = as.integer(terra::extract(smod, terra::project(pts, terra::crs(smod)))[[2]])
+    smod_code = as.integer(terra::extract(
+      smod,
+      terra::project(pts, terra::crs(smod))
+    )[[2]])
   ) |>
   dplyr::left_join(SMOD_L2_CLASSES, by = "smod_code")
 
@@ -298,10 +389,10 @@ if (length(unexpected) > 0) {
 #
 # Fast (a few minutes at most), so it runs before the slow population sums.
 SETTLEMENT_LAYERS <- tibble::tribble(
-  ~name,           ~codes,                     ~directions,
-  "centre",        list(30L),                   4L,   # urban centre: no diagonals
-  "urban",         list(c(21L, 22L, 23L, 30L)), 8L,   # urban cluster incl. centres
-  "rural_cluster", list(13L),                   8L    # rural cluster
+  ~name           , ~codes                      , ~directions ,
+  "centre"        , list(30L)                   , 4L          , # urban centre: no diagonals
+  "urban"         , list(c(21L, 22L, 23L, 30L)) , 8L          , # urban cluster incl. centres
+  "rural_cluster" , list(13L)                   , 8L # rural cluster
 ) |>
   dplyr::mutate(codes = purrr::map(.data$codes, unlist))
 
@@ -314,14 +405,56 @@ SETTLEMENT_WINDOW_M <- 75000
 
 message("Tracing contiguous settlements")
 settlements <- contiguous_settlements(
-  towers$lon, towers$lat, smod, pop_raster[["1000"]], SETTLEMENT_LAYERS,
-  nearest = "centre", half_width_m = SETTLEMENT_WINDOW_M
+  towers$lon,
+  towers$lat,
+  smod,
+  pop_raster[["1000"]],
+  SETTLEMENT_LAYERS,
+  nearest = "centre",
+  half_width_m = SETTLEMENT_WINDOW_M
 )
 site <- site |>
-  dplyr::left_join(dplyr::bind_cols(tower_id = towers$tower_id, settlements),
-                   by = "tower_id")
-message(sum(site$settlement_window_edge), " towers have a settlement cut by its ",
-        "tracing window (population is a lower bound)")
+  dplyr::left_join(
+    dplyr::bind_cols(tower_id = towers$tower_id, settlements),
+    by = "tower_id"
+  )
+
+# Built-up and non-residential surface summed over each tower's urban centre:
+# the same tracing, with the built-up rasters in place of population (D-036).
+centre_only <- dplyr::filter(SETTLEMENT_LAYERS, .data$name == "centre")
+centre_built <- purrr::map(
+  list(built = built_raster, nres = nres_raster),
+  \(r) {
+    contiguous_settlements(
+      towers$lon,
+      towers$lat,
+      smod,
+      r[["1000"]],
+      centre_only,
+      half_width_m = SETTLEMENT_WINDOW_M
+    )$centre_pop /
+      1e6
+  }
+)
+site <- site |>
+  dplyr::left_join(
+    tibble::tibble(
+      tower_id = towers$tower_id,
+      centre_built_km2 = centre_built$built,
+      centre_nres_km2 = centre_built$nres,
+      centre_nres_share = dplyr::if_else(
+        centre_built$built > 0,
+        centre_built$nres / centre_built$built,
+        NA_real_
+      )
+    ),
+    by = "tower_id"
+  )
+message(
+  sum(site$settlement_window_edge),
+  " towers have a settlement cut by its ",
+  "tracing window (population is a lower bound)"
+)
 
 # ---- ONS RUC 2021 (England & Wales) -----------------------------------------
 
@@ -335,8 +468,10 @@ stopifnot("ONS layer is missing expected columns" = all(needed %in% names(oa)))
 
 ruc_hits <- sf::st_as_sf(towers, coords = c("lon", "lat"), crs = 4326) |>
   sf::st_transform(sf::st_crs(oa)) |>
-  sf::st_join(oa |> dplyr::select(dplyr::all_of(needed)),
-              join = sf::st_intersects) |>
+  sf::st_join(
+    oa |> dplyr::select(dplyr::all_of(needed)),
+    join = sf::st_intersects
+  ) |>
   sf::st_drop_geometry()
 
 # Generalised (BGC) boundaries can overlap slightly, so a tower on a shared
@@ -346,18 +481,34 @@ ruc_hits <- sf::st_as_sf(towers, coords = c("lon", "lat"), crs = 4326) |>
 # be a tie-break nobody chose.
 ruc <- ruc_hits |>
   dplyr::summarise(
-    n_oa       = dplyr::n_distinct(.data$OA21CD, na.rm = TRUE),
-    n_class    = dplyr::n_distinct(.data$RUC21CD, na.rm = TRUE),
-    oa21cd     = if (dplyr::n_distinct(.data$OA21CD) == 1) dplyr::first(.data$OA21CD) else NA_character_,
-    ruc21cd    = if (dplyr::n_distinct(.data$RUC21CD) == 1) dplyr::first(.data$RUC21CD) else NA_character_,
-    ruc21nm    = if (dplyr::n_distinct(.data$RUC21NM) == 1) dplyr::first(.data$RUC21NM) else NA_character_,
+    n_oa = dplyr::n_distinct(.data$OA21CD, na.rm = TRUE),
+    n_class = dplyr::n_distinct(.data$RUC21CD, na.rm = TRUE),
+    oa21cd = if (dplyr::n_distinct(.data$OA21CD) == 1) {
+      dplyr::first(.data$OA21CD)
+    } else {
+      NA_character_
+    },
+    ruc21cd = if (dplyr::n_distinct(.data$RUC21CD) == 1) {
+      dplyr::first(.data$RUC21CD)
+    } else {
+      NA_character_
+    },
+    ruc21nm = if (dplyr::n_distinct(.data$RUC21NM) == 1) {
+      dplyr::first(.data$RUC21NM)
+    } else {
+      NA_character_
+    },
     .by = "tower_id"
   ) |>
   dplyr::mutate(ruc_ambiguous = .data$n_class > 1) |>
   dplyr::select(-"n_class")
 
-message(sum(ruc$n_oa > 1), " towers sit on a boundary between OAs; ",
-        sum(ruc$ruc_ambiguous), " of them between OAs of different RUC class (set to NA)")
+message(
+  sum(ruc$n_oa > 1),
+  " towers sit on a boundary between OAs; ",
+  sum(ruc$ruc_ambiguous),
+  " of them between OAs of different RUC class (set to NA)"
+)
 
 # BGC boundaries are clipped to the coastline. A tower on a cliff edge or a
 # quayside can fall just outside every polygon. Report it; do not snap it to
@@ -368,8 +519,11 @@ ew_unmatched <- frame |>
   dplyr::inner_join(ruc, by = "tower_id") |>
   dplyr::filter(.data$n_oa == 0)
 if (nrow(ew_unmatched) > 0) {
-  message(nrow(ew_unmatched), " England/Wales towers fell outside every OA polygon: ",
-          paste(ew_unmatched$tower_id, collapse = ", "))
+  message(
+    nrow(ew_unmatched),
+    " England/Wales towers fell outside every OA polygon: ",
+    paste(ew_unmatched$tower_id, collapse = ", ")
+  )
 }
 
 site <- site |> dplyr::left_join(ruc |> dplyr::select(-"n_oa"), by = "tower_id")
@@ -386,8 +540,13 @@ pop_cols <- MEASURES |>
   dplyr::group_split(.data$pop_res_m) |>
   purrr::map(\(m) {
     message("Population, ", nrow(m), " measures at ", m$pop_res_m[[1]], " m")
-    raster_window_sums(towers$lon, towers$lat,
-                       pop_raster[[as.character(m$pop_res_m[[1]])]], m, KERNEL_TOL)
+    raster_window_sums(
+      towers$lon,
+      towers$lat,
+      pop_raster[[as.character(m$pop_res_m[[1]])]],
+      m,
+      KERNEL_TOL
+    )
   }) |>
   purrr::list_cbind()
 
@@ -395,8 +554,13 @@ land_cols <- MEASURES |>
   dplyr::group_split(.data$pop_res_m) |>
   purrr::map(\(m) {
     message("Land, ", nrow(m), " measures at ", m$pop_res_m[[1]], " m")
-    raster_window_sums(towers$lon, towers$lat,
-                       land_raster[[as.character(m$pop_res_m[[1]])]], m, KERNEL_TOL)
+    raster_window_sums(
+      towers$lon,
+      towers$lat,
+      land_raster[[as.character(m$pop_res_m[[1]])]],
+      m,
+      KERNEL_TOL
+    )
   }) |>
   purrr::list_cbind() |>
   dplyr::mutate(dplyr::across(dplyr::everything(), \(x) x * land_to_km2))
@@ -408,6 +572,18 @@ land_cols <- MEASURES |>
 # cells, and the count varies by up to about 6% with where the tower sits in
 # its cell. That affects density_r500m (all surface) and land_share_r500m, but
 # not density_land_r500m, whose land is summed over the same cells.
+built_cols <- purrr::map(list(built = built_raster, nres = nres_raster), \(r) {
+  message("Built-up surface, ", nrow(BUILT_MEASURES), " measures at 100 m")
+  raster_window_sums(
+    towers$lon,
+    towers$lat,
+    r[["100"]],
+    BUILT_MEASURES,
+    KERNEL_TOL
+  ) |>
+    dplyr::mutate(dplyr::across(dplyr::everything(), \(x) x / 1e6)) # m2 -> km2
+})
+
 measure_area_km2 <- purrr::pmap_dbl(MEASURES, \(type, param_m, ...) {
   if (type == "kernel") {
     lambda <- log(2) / param_m
@@ -419,18 +595,26 @@ measure_area_km2 <- purrr::pmap_dbl(MEASURES, \(type, param_m, ...) {
 names(measure_area_km2) <- MEASURES$measure
 
 tower_cols <- point_window_sums(
-  towers, frame_src |> dplyr::mutate(weight = 1), MEASURES, KERNEL_TOL
+  towers,
+  frame_src |> dplyr::mutate(weight = 1),
+  MEASURES,
+  KERNEL_TOL
 )
 bell_cols <- point_window_sums(
-  towers, frame_src |> dplyr::mutate(weight = .data$bells), MEASURES, KERNEL_TOL
+  towers,
+  frame_src |> dplyr::mutate(weight = .data$bells),
+  MEASURES,
+  KERNEL_TOL
 )
 
 context <- dplyr::bind_cols(
   towers |> dplyr::select("tower_id"),
-  pop_cols   |> dplyr::rename_with(\(x) paste0("pop_", x)),
+  pop_cols |> dplyr::rename_with(\(x) paste0("pop_", x)),
   tower_cols |> dplyr::rename_with(\(x) paste0("towers_", x)),
-  bell_cols  |> dplyr::rename_with(\(x) paste0("bells_", x)),
-  land_cols  |> dplyr::rename_with(\(x) paste0("land_km2_", x))
+  bell_cols |> dplyr::rename_with(\(x) paste0("bells_", x)),
+  land_cols |> dplyr::rename_with(\(x) paste0("land_km2_", x)),
+  built_cols$built |> dplyr::rename_with(\(x) paste0("built_km2_", x)),
+  built_cols$nres |> dplyr::rename_with(\(x) paste0("nres_km2_", x))
 ) |>
   dplyr::mutate(in_frame = .data$tower_id %in% frame_towers$tower_id)
 
@@ -440,28 +624,61 @@ for (m in MEASURES$measure) {
   context <- context |>
     dplyr::mutate(
       !!paste0("pop_per_tower_", m) := dplyr::if_else(
-        .data$in_frame, .data[[paste0("pop_", m)]] / .data[[paste0("towers_", m)]],
-        NA_real_),
+        .data$in_frame,
+        .data[[paste0("pop_", m)]] / .data[[paste0("towers_", m)]],
+        NA_real_
+      ),
       !!paste0("pop_per_bell_", m) := dplyr::if_else(
-        .data$in_frame, .data[[paste0("pop_", m)]] / .data[[paste0("bells_", m)]],
-        NA_real_),
-      !!paste0("area_km2_", m)   := measure_area_km2[[m]],
-      !!paste0("land_share_", m) := .data[[paste0("land_km2_", m)]] / measure_area_km2[[m]],
-      !!paste0("density_", m)    := .data[[paste0("pop_", m)]] / measure_area_km2[[m]],
+        .data$in_frame,
+        .data[[paste0("pop_", m)]] / .data[[paste0("bells_", m)]],
+        NA_real_
+      ),
+      !!paste0("area_km2_", m) := measure_area_km2[[m]],
+      !!paste0("land_share_", m) := .data[[paste0("land_km2_", m)]] /
+        measure_area_km2[[m]],
+      !!paste0("density_", m) := .data[[paste0("pop_", m)]] /
+        measure_area_km2[[m]],
       !!paste0("density_land_", m) := dplyr::if_else(
         .data[[paste0("land_km2_", m)]] > 0,
         .data[[paste0("pop_", m)]] / .data[[paste0("land_km2_", m)]],
-        NA_real_)
+        NA_real_
+      )
     )
+}
+
+for (m in BUILT_MEASURES$measure) {
+  context <- context |>
+    dplyr::mutate(
+      !!paste0("nres_share_", m) := dplyr::if_else(
+        .data[[paste0("built_km2_", m)]] > 0,
+        .data[[paste0("nres_km2_", m)]] / .data[[paste0("built_km2_", m)]],
+        NA_real_
+      )
+    )
+}
+max_nres <- max(
+  dplyr::select(context, dplyr::starts_with("nres_share_")),
+  na.rm = TRUE
+)
+if (max_nres > 1 + 1e-6) {
+  stop(
+    "Non-residential share above 1: check the built-up layers.",
+    call. = FALSE
+  )
 }
 
 # Cell-centre sampling can push the land share over 1 inland: by under 1% for
 # most measures, and by up to about 6% for the 500 m circle (see above).
 # Anything well over that means the unit check above was wrong; a unit error
 # would be a factor of 100 or more.
-max_share <- max(dplyr::select(context, dplyr::starts_with("land_share_")), na.rm = TRUE)
+max_share <- max(
+  dplyr::select(context, dplyr::starts_with("land_share_")),
+  na.rm = TRUE
+)
 message("Largest land share: ", round(max_share, 3))
-if (max_share > 1.08) stop("Land share above 1.08: check the GHS-LAND unit.", call. = FALSE)
+if (max_share > 1.08) {
+  stop("Land share above 1.08: check the GHS-LAND unit.", call. = FALSE)
+}
 
 context <- context |> dplyr::left_join(site, by = "tower_id")
 
@@ -477,7 +694,8 @@ for (m in MEASURES$measure) {
 # Frame towers where the narrowest population kernel came back zero. These
 # should be rare. Lundy is the expected one. Many would mean missing tiles.
 k1 <- MEASURES$measure[MEASURES$type == "kernel"][
-  which.min(MEASURES$param_m[MEASURES$type == "kernel"])]
+  which.min(MEASURES$param_m[MEASURES$type == "kernel"])
+]
 zero_pop <- context |>
   dplyr::filter(.data$in_frame, .data[[paste0("pop_", k1)]] == 0)
 message(nrow(zero_pop), " frame towers with zero population in kernel ", k1)
@@ -489,15 +707,25 @@ context |>
 
 # ---- write ------------------------------------------------------------------
 
-out <- here::here("data", "curated",
-                  paste0("tower_context_", FRAME_SNAPSHOT, ".parquet"))
+out <- here::here(
+  "data",
+  "curated",
+  paste0("tower_context_", FRAME_SNAPSHOT, ".parquet")
+)
 
 write_artefact(
   context,
-  path        = out,
-  snapshot_id = c(FRAME_SNAPSHOT, GHSL_POP_SNAPSHOT, GHSL_SMOD_SNAPSHOT,
-                  ONS_RUC_SNAPSHOT, GHSL_LAND_SNAPSHOT),
-  script      = "scripts/08_build_tower_context.R"
+  path = out,
+  snapshot_id = c(
+    FRAME_SNAPSHOT,
+    GHSL_POP_SNAPSHOT,
+    GHSL_SMOD_SNAPSHOT,
+    ONS_RUC_SNAPSHOT,
+    GHSL_LAND_SNAPSHOT,
+    GHSL_BUILT_SNAPSHOT,
+    GHSL_NRES_SNAPSHOT
+  ),
+  script = "scripts/08_build_tower_context.R"
 )
 
 message("Wrote ", out)

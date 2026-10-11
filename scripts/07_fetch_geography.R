@@ -14,6 +14,12 @@
 #               only one published). Same tile grid as ghsl_pop. Used to turn
 #               population into people per km2 of LAND, and to measure how much
 #               of a tower's catchment is sea.
+#   ghsl_built  GHS-BUILT-S R2023A, built-up surface per 100 m cell (m2),
+#               epoch 2020 to match population. Same tile grid.
+#   ghsl_nres   GHS-BUILT-S NRES R2023A, the NON-RESIDENTIAL part of it:
+#               "Non-residential built-up surface per grid cell". Used to find
+#               town and city centres, which are short of residents but full
+#               of shops and offices (D-036, Mark 2026-10-11).
 #
 # Each source lands in data/raw/<source>/<date>/ and gets one fetch_log row
 # per file, as Dove does. Zips are stored as fetched. Unzipping happens in
@@ -24,7 +30,7 @@
 # LICENCES
 #   GHSL: (c) European Union. "Reuse is authorised, provided the source is
 #   acknowledged." Cite Schiavina et al. (2023) GHS-POP R2023A and
-#   GHS-SMOD R2023A, and GHS-LAND R2022A.
+#   GHS-SMOD R2023A, GHS-BUILT-S R2023A, and GHS-LAND R2022A.
 #   ONS boundaries: Open Government Licence v3; contains OS data (c) Crown
 #   copyright and database right.
 
@@ -48,8 +54,9 @@ MAX_HALF_DISTANCE_M <- 8000
 # Which sources this run fetches. Each fetch makes a new dated snapshot and
 # refuses to overwrite one taken earlier the same day, so name only what is
 # needed. All four were wanted on first use. On 2026-10-10 pop, smod and ons
-# were already fetched, so only ghsl_land was still needed.
-SOURCES_TO_FETCH <- c("ghsl_land")
+# were already fetched, so only ghsl_land was still needed. On 2026-10-11 the
+# built-up layers were added (D-036).
+SOURCES_TO_FETCH <- c("ghsl_built", "ghsl_nres")
 
 fetch_date <- Sys.Date()
 UA <- "CCCBR Ringing Census 2026 (https://github.com/cccbr/ringing-census-2026)"
@@ -68,6 +75,15 @@ ghsl_pop_tile_url <- function(tile, epoch = GHSL_EPOCH) {
 ghsl_land_tile_url <- function(tile) {
   stem <- "GHS_LAND_E2018_GLOBE_R2022A_54009_100"
   paste0(GHSL_ROOT, "/GHS_LAND_GLOBE_R2022A/", stem, "/V1-0/tiles/",
+         stem, "_V1_0_", tile, ".zip")
+}
+
+# Built-up surface: total, and its non-residential part. Same release, epoch
+# and tile grid as population.
+ghsl_built_tile_url <- function(tile, nres = FALSE, epoch = GHSL_EPOCH) {
+  stem <- paste0("GHS_BUILT_S_", if (nres) "NRES_" else "", epoch,
+                 "_GLOBE_R2023A_54009_100")
+  paste0(GHSL_ROOT, "/GHS_BUILT_S_GLOBE_R2023A/", stem, "/V1-0/tiles/",
          stem, "_V1_0_", tile, ".zip")
 }
 
@@ -241,6 +257,25 @@ if ("ghsl_land" %in% SOURCES_TO_FETCH) {
     max_half_distance_m = MAX_HALF_DISTANCE_M
   ))
   fetched$ghsl_land <- sid
+}
+
+# ---- GHSL built-up surface, total and non-residential ------------------------
+
+for (src in intersect(c("ghsl_built", "ghsl_nres"), SOURCES_TO_FETCH)) {
+  sid  <- paste0(src, "_", GHSL_EPOCH, "_", format(fetch_date, "%Y-%m-%d"))
+  dest <- new_snapshot_dir(src)
+  built_manifest <- purrr::map(tiles, \(t) {
+    url <- ghsl_built_tile_url(t, nres = src == "ghsl_nres")
+    fetch_file(url, fs::path(dest, fs::path_file(url)), sid, src, allow_404 = TRUE)
+  }) |>
+    purrr::list_rbind()
+  record(built_manifest, dest, extra = list(
+    epoch = GHSL_EPOCH,
+    tiles_requested = tiles,
+    tiles_chosen_from = FRAME_SNAPSHOT,
+    max_half_distance_m = MAX_HALF_DISTANCE_M
+  ))
+  fetched[[src]] <- sid
 }
 
 # ---- GHSL SMOD --------------------------------------------------------------
