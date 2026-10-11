@@ -38,6 +38,8 @@ a{color:var(--link)}
 .matches{margin-top:6px;font-size:12px}
 .matches button{display:block;width:100%;text-align:left;background:none;border:0;padding:3px 2px;color:var(--link);cursor:pointer;font:inherit}
 @media (max-width:600px){.panel{top:auto;bottom:12px;max-height:45vh}}
+/* Monochrome base map, so the type colours carry the meaning. */
+.leaflet-tile-pane{filter:grayscale(1) contrast(0.9) brightness(1.05)}
 </style>
 </head>
 <body>
