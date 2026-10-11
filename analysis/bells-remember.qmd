@@ -74,9 +74,9 @@ as they are today (D-035).
    populations.
 2. *The earshot test within one ring size,* using tenor weight from Dove.
    Parked to keep this simple; bell-metal density likewise.
-3. *Whether a market-town interaction is real.* An unpruned tree hints that
-   a moderately dense core means more in sparse surroundings;
-   cross-validation does not support it.
+3. *What causes the market-town interaction.* For rings of 8 or more, a
+   dense core means more in sparse surroundings. A direct test supports it;
+   trees cannot see it. Its cause, history or geography, is untested.
 
 ## Background and brief
 
@@ -403,6 +403,207 @@ say <- \(x) sub("(kernel|circle) ", "\\1 is ", x)   # "1 km kernel under 420" ->
 
 `r if (interaction) paste0("**The tree for 8 or more finds an interaction.** Among towers where the ", say(pair$core[1]), " people per km² of land, those where the ", say(sparse$wider), " have ", pct(sparse$share), " rings of 8 or more, against ", pct(dense$share), " where the ", say(dense$wider), ". ", if (sparse$share > dense$share) "The same core density means more where the surroundings are sparse. That is the free-standing market town against the village absorbed into a larger place: alike at the church, different in history. A place classification that separates the two, without using bells, is on the right lines." else "Here denser surroundings go with larger rings.") else "**No interaction between scales survives pruning.** An unpruned tree for 8 or more does split again on wider kernels, suggesting that a moderately dense core means more where its surroundings are sparse, the free-standing market town against the absorbed village. But cross-validation does not support those extra splits, so treat that pattern as a hint, not a finding."`
 
+### Looking harder for interactions
+
+The trees above are deliberately strict: leaves of at least 30 towers, and
+pruned to the simplest tree within one standard error of the best. That
+guards against noise, but could hide a real interaction that touches only a
+few towers. Four further checks look harder (Mark, 11 October). The first
+three use the same data as the trees; the fourth is a different kind of
+model, with more power to find a smooth interaction.
+
+```{r}
+#| label: explore-settings
+#| include: false
+N_BOOT     <- 200   # bootstrap resamples for split stability
+N_CV_SEEDS <- 20    # repeats of the cross-validation, each with new folds
+TIGHT_KERNELS <- c("density_land_k250m", "density_land_k500m", "density_land_k1km")
+scale_group <- \(v) dplyr::case_when(v == "coast" ~ "the coast",
+                                     v %in% TIGHT_KERNELS ~ "a tight kernel (1 km or less)",
+                                     TRUE ~ "a wide kernel (2 km or more)")
+target_data <- \(k, d = tree_base) d |>
+  dplyr::mutate(target = factor(.data$bells >= k, levels = c(FALSE, TRUE),
+                                labels = c(paste("under", k), paste(k, "or more")))) |>
+  dplyr::select(-"bells")
+```
+
+**1. Loose trees.** Leaves of 10 towers, and pruned to the *lowest*
+cross-validated error rather than the one-standard-error rule. The
+cross-validation is repeated `r N_CV_SEEDS` times with new random folds, to
+see whether the best size is stable.
+
+```{r}
+#| label: tbl-loose-trees
+loose <- purrr::map(c(8, 10, 12), \(k) {
+  d <- target_data(k)
+  fits <- purrr::map(seq_len(N_CV_SEEDS), \(s) {
+    set.seed(s)
+    rpart::rpart(target ~ ., data = d, method = "class",
+                 parms = list(prior = c(0.5, 0.5)),
+                 control = rpart::rpart.control(cp = 0.001, minbucket = 10, maxsurrogate = 0))
+  })
+  best_n <- purrr::map_dbl(fits, \(f) f$cptable[which.min(f$cptable[, "xerror"]), "nsplit"])
+  ct <- fits[[1]]$cptable
+  tibble::tibble(target = paste0(k, "+ bells"),
+                 `most common best size (splits)` = as.numeric(names(which.max(table(best_n)))),
+                 `repeats where more than one split is best` = paste(sum(best_n > 1), "of", N_CV_SEEDS),
+                 `error at 1 split` = round(ct[ct[, "nsplit"] == 1, "xerror"], 3),
+                 `error at the largest tree` = round(ct[nrow(ct), "xerror"], 3),
+                 `largest tree (splits)` = ct[nrow(ct), "nsplit"])
+}) |> purrr::list_rbind()
+knitr::kable(loose, caption = "Loose trees (leaves of 10 towers): cross-validated error, relative to a tree with no splits")
+```
+
+**2. Split stability.** Two-level trees refitted on `r N_BOOT` bootstrap
+resamples. If a dense core means something different in sparse
+surroundings, the second split, under the first one on the core, should
+often be on a wide kernel.
+
+```{r}
+#| label: tbl-split-stability
+set.seed(2026)
+stability <- purrr::map(c(8, 10, 12), \(k) {
+  d <- target_data(k)
+  purrr::map(seq_len(N_BOOT), \(b) {
+    tr <- rpart::rpart(target ~ ., data = d[sample(nrow(d), replace = TRUE), ], method = "class",
+                       parms = list(prior = c(0.5, 0.5)),
+                       control = rpart::rpart.control(cp = -1, maxdepth = 2, minbucket = 10,
+                                                      maxsurrogate = 0, xval = 0))
+    v <- as.character(tr$frame$var)
+    n <- as.integer(rownames(tr$frame))
+    second <- scale_group(v[n %in% c(2, 3) & v != "<leaf>"])
+    tibble::tibble(on = c("a tight kernel (1 km or less)", "a wide kernel (2 km or more)", "the coast"),
+                   used = c("a tight kernel (1 km or less)", "a wide kernel (2 km or more)",
+                                          "the coast") %in% second)
+  }) |> purrr::list_rbind() |>
+    dplyr::summarise(share = mean(.data$used), .by = "on") |>
+    dplyr::mutate(target = paste0(k, "+ bells"))
+}) |> purrr::list_rbind()
+stability |>
+  dplyr::select("target", "on", "share") |>
+  tidyr::pivot_wider(names_from = "on", values_from = "share", values_fill = 0) |>
+  dplyr::mutate(dplyr::across(-"target", pct)) |>
+  knitr::kable(caption = paste0("Share of ", N_BOOT, " bootstrap resamples whose second-level splits use each kind of measure"))
+wide_second <- \(k) sum(stability$share[stability$target == paste0(k, "+ bells") &
+                                          stability$on == "a wide kernel (2 km or more)"])
+```
+
+**3. A direct test.** A logistic model for each ring size, with smooth
+effects of the core (the `r measure_label(TIGHT_VAR)`) and of the
+surroundings, fitted with and without a smooth interaction between
+them.^[A generalised additive model (Wood 2017), using `mgcv`, which ships
+with R. The interaction is a tensor-product term, `ti()`, so the two models
+are nested.] Two surroundings are tried: the 2 km and 8 km kernels. A fall
+in AIC (a fit score that penalises extra complexity) of more than about 10
+is strong evidence for the interaction.
+
+```{r}
+#| label: tbl-gam-interaction
+gam_fits <- tidyr::expand_grid(k = c(8, 10, 12),
+                               wide = c("density_land_k2km", "density_land_k8km")) |>
+  dplyr::mutate(res = purrr::map2(.data$k, .data$wide, \(k, w) {
+    d <- tibble::tibble(y = as.integer(tree_base$bells >= k),
+                        core = tree_base[[TIGHT_VAR]], wide = tree_base[[w]])
+    m0 <- mgcv::gam(y ~ s(core) + s(wide), family = stats::binomial, data = d, method = "REML")
+    m1 <- mgcv::gam(y ~ s(core) + s(wide) + ti(core, wide), family = stats::binomial,
+                    data = d, method = "REML")
+    st <- summary(m1)$s.table
+    tibble::tibble(aic_gain = stats::AIC(m0) - stats::AIC(m1),
+                   p = st[nrow(st), "p-value"],
+                   dev0 = summary(m0)$dev.expl, dev1 = summary(m1)$dev.expl,
+                   m0 = list(m0), m1 = list(m1))
+  })) |>
+  tidyr::unnest("res")
+gam_fits |>
+  dplyr::transmute(target = paste0(.data$k, "+ bells"),
+                   surroundings = measure_label(.data$wide),
+                   `fall in AIC with the interaction` = round(.data$aic_gain, 1),
+                   `p-value of the interaction` = format.pval(.data$p, digits = 2, eps = 1e-4),
+                   `deviance explained, without` = pct(.data$dev0),
+                   `with` = pct(.data$dev1)) |>
+  knitr::kable(caption = "Does the core mean something different in sparse surroundings? Logistic models with and without the interaction")
+best_gam <- gam_fits |> dplyr::filter(.data$k == 8) |> dplyr::slice_max(.data$aic_gain, n = 1)
+gam_supported <- gam_fits |> dplyr::filter(.data$aic_gain > 10)
+```
+
+```{r}
+#| label: fig-gam-interaction
+#| fig-height: 4.5
+#| fig-cap: "Chance of a ring of 8 or more against density at the core, for towers in sparse, middling and dense surroundings, from the model with the interaction. Each line is drawn only over the core densities where the middle 90% of towers in that band of surroundings lie."
+d8 <- tibble::tibble(core = tree_base[[TIGHT_VAR]], wide = tree_base[[best_gam$wide]])
+bands <- tibble::tibble(band = c("sparse (10th percentile)", "middling (median)", "dense (90th percentile)"),
+                        q = c(0.1, 0.5, 0.9),
+                        wide = stats::quantile(d8$wide, c(0.1, 0.5, 0.9)))
+tercile <- cut(d8$wide, stats::quantile(d8$wide, c(0, 1/3, 2/3, 1)), include.lowest = TRUE, labels = FALSE)
+curve_8 <- purrr::pmap(list(bands$band, bands$wide, 1:3), \(b, w, i) {
+  rng <- stats::quantile(d8$core[tercile == i], c(0.05, 0.95))
+  g <- tibble::tibble(core = seq(rng[1], rng[2], length.out = 80), wide = w)
+  g$p <- stats::predict(best_gam$m1[[1]], g, type = "response")
+  dplyr::mutate(g, band = b)
+}) |> purrr::list_rbind() |>
+  dplyr::mutate(band = factor(.data$band, levels = bands$band))
+ggplot(curve_8, aes(10^core, p, colour = band)) +
+  geom_line(linewidth = 0.9) +
+  scale_x_log10(labels = scales::label_comma()) +
+  scale_y_continuous(labels = scales::label_percent(), limits = c(0, 1)) +
+  scale_colour_manual(values = stats::setNames(PAL_CAT[c(3, 1, 2)], bands$band),
+                      name = paste("Surroundings,", measure_label(best_gam$wide))) +
+  labs(x = paste("People per km² of land at the core,", measure_label(TIGHT_VAR), "(log scale)"),
+       y = "Chance of 8 or more bells")
+```
+
+**4. Trees that split by significance tests.** A conditional inference
+tree^[Hothorn, Hornik & Zeileis (2006); see *Methods and sources*.] chooses
+each split by a test, not greedily, and stops when no split is significant
+(here at the 1% level, with leaves of at least 10 and at most three levels).
+
+```{r}
+#| label: tbl-ctree
+has_partykit <- requireNamespace("partykit", quietly = TRUE)
+if (has_partykit) {
+  purrr::map(c(8, 10, 12), \(k) {
+    d <- target_data(k)
+    ct <- partykit::ctree(target ~ ., data = d,
+                          control = partykit::ctree_control(alpha = 0.01, minbucket = 10, maxdepth = 3))
+    inner <- setdiff(partykit::nodeids(ct), partykit::nodeids(ct, terminal = TRUE))
+    vars <- vapply(inner, \(i) names(d)[partykit::split_node(partykit::node_party(ct[[i]]))$varid], "")
+    tibble::tibble(target = paste0(k, "+ bells"), splits = length(inner),
+                   `measures used, in order` = paste(unique(tree_label(vars)), collapse = "; "),
+                   `splits on a wide kernel` = sum(scale_group(vars) == "a wide kernel (2 km or more)"))
+  }) |> purrr::list_rbind() |>
+    knitr::kable(caption = "Conditional inference trees (splits significant at 1%)")
+} else {
+  knitr::asis_output("*Not run: the `partykit` package is not installed. Install it, and run `renv::snapshot()`.*")
+}
+```
+
+**What the four checks show.**
+
+- **Loosening the leaves does not find more structure.** Even with leaves of
+  10, cross-validation picks a single split in
+  `r sum(loose$"most common best size (splits)" == 1)` of the 3 trees; larger
+  trees fit the data better but predict new towers worse. The strict
+  settings were not what held the trees back.
+- **The trees' second split is almost always on the core again.** For rings
+  of 8 or more, only `r pct(wide_second(8))` of resamples put a second-level
+  split on a wide kernel. A tree spends its early splits sharpening the strong effect of
+  the core, so a gentler interaction never gets its turn. There is a second
+  reason. A tree is pruned on how many towers it puts in the right class,
+  so a split that moves the chance of 8 bells from, say, 40% to 60%, but
+  leaves both sides predicting the same class, earns nothing and is cut.
+  The interaction here works exactly that way.
+- **`r if (nrow(gam_supported) > 0) paste0("The direct test does find an interaction, for ", paste(unique(paste0(gam_supported$k, "+")), collapse = " and "), " bells only.") else "The direct test finds no interaction worth the name."`**
+  `r if (nrow(gam_supported) > 0) paste0("With the ", measure_label(best_gam$wide), " as the surroundings, adding it lowers the AIC by ", round(best_gam$aic_gain), ", which is strong evidence. But it is small: deviance explained rises only from ", pct(best_gam$dev0), " to ", pct(best_gam$dev1), ". It is broad and gentle, not niche: the same core density means a better chance of 8 or more bells where the surroundings are sparse, which is the free-standing market town against the absorbed village. The figure shows its shape.") else ""`
+  For 10 and 12 bells there is `r if (all(gam_fits$aic_gain[gam_fits$k > 8] < 10)) "no sign of it" else "some sign of it"`.
+- **The significance-test trees** `r if (has_partykit) "agree: they split mostly on tight kernels, with at most one split each on a wide kernel." else "were not run."`
+
+**The strongest case against the market-town reading.** Towers with a
+dense core and sparse surroundings are few, so the sparse curve's upper end
+rests on a small number of towers. And "sparse surroundings" is partly
+geography: if such towns cluster in particular regions, a regional history
+could explain their large rings instead. That has not been checked. The
+interaction is real in these data, but its cause is not shown.
+
 **The better use of trees comes after fieldwork.** Once the census measures
 band size and response for the chased towers, a model-based tree^[Hothorn,
 Hornik & Zeileis (2006); Zeileis, Hothorn & Hornik (2008).] can partition the
@@ -586,3 +787,6 @@ relationships change: Zeileis, A., Hothorn, T. & Hornik, K. (2008),
 "Model-based recursive partitioning", *Journal of Computational and
 Graphical Statistics* 17(2), 492–514. Both are in the R package `partykit`.
 
+**Generalised additive models.** Wood, S. N. (2017), *Generalized Additive
+Models: An Introduction with R*, 2nd edition, Chapman & Hall/CRC.
+Implemented in the R package `mgcv`, which ships with R.
