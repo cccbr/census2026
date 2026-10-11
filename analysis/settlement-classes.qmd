@@ -89,11 +89,11 @@ ring_check <- frame_towers |>
 p8_of <- \(t) ring_check$p8[ring_check$type == t]
 
 # ---- known towers -------------------------------------------------------------
-# "Society or city-core tower" is a list, not a kind of place, so it agrees
-# with anyone who feels the place is a city or an inner city.
+# "Historic city core" is a part of a city, so it agrees with anyone who
+# feels the place is a city or an inner city.
 agrees <- function(feels, type) {
   feels == as.character(type) |
-    (type == "Society or city-core tower" & feels %in% c("City or large town", "Inner city"))
+    (type == "Historic city core" & feels %in% c("City or large town", "Inner city"))
 }
 known_b <- known |>
   dplyr::select("tower_id", "known_by", "relationship", "feels_like", "why") |>
@@ -109,7 +109,8 @@ st_albans <- known_row("15782")
 # ---- reclassify with one threshold changed (for sensitivity tables) ---------
 reclass <- function(d, ...) {
   th <- utils::modifyList(DRAFT_B, list(...))
-  classify_settlement_b(d$centre_pop, d[[INNER_VAR]], d$pop_r1km, d$society, th, TYPE_LEVELS)
+  classify_settlement_b(d$centre_pop, d[[INNER_VAR]], d$pop_r1km, d$other_bells_1km,
+                        d$society, th, TYPE_LEVELS)
 }
 # The town line at which Draft B's town share comes closest to 1988's.
 town_88 <- counts_1988$share_best[counts_1988$type_1988 == "Town"]
@@ -125,6 +126,62 @@ village_b_at_88 <- mean(reclass(comparable_1988, town_pop_1km = line_88) %in%
 *Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
 and made the decisions; Claude drafted the code and text, which Mark
 reviewed.*
+
+## Where this stands
+
+*Mark's take, drafted by Claude from Mark's decisions. Tentative: to be
+tested with the other analysis volunteers.*
+
+**Current recommendation.** Use Draft B to describe every tower and to
+stratify the chased sample. It answers "what sort of place are these bells
+in?" from place measures alone, in seven types:
+
+```{r}
+#| label: tbl-stand
+frame_towers |>
+  dplyr::count(.data$type, name = "frame towers") |>
+  dplyr::mutate(share = scales::label_percent(accuracy = 0.1)(.data$`frame towers` / sum(.data$`frame towers`))) |>
+  dplyr::left_join(tibble::tibble(
+    type = factor(TYPE_LEVELS, levels = TYPE_LEVELS),
+    `in plain words` = c(
+      paste0("Fewer than ", fmt(DRAFT_B$village_pop_1km), " people within 1 km"),
+      paste0(fmt(DRAFT_B$village_pop_1km), " to ", fmt(DRAFT_B$town_pop_1km - 1), " people within 1 km"),
+      paste0("At least ", fmt(DRAFT_B$town_pop_1km), " people within 1 km, outside any city"),
+      paste0("In a continuous built-up area of 50,000 to ", fmt(DRAFT_B$conurbation_pop), " people"),
+      paste0("In a conurbation of ", fmt(DRAFT_B$conurbation_pop), " or more, away from its densest parts"),
+      paste0("In a conurbation's densest parts (", fmt(DRAFT_B$inner_density), "+ people per km²)"),
+      paste0("In a city centre with ", fmt(DRAFT_B$core_other_bells), "+ bells at other towers within 1 km")
+    )), by = "type") |>
+  dplyr::select("type", "in plain words", "frame towers", "share") |>
+  knitr::kable()
+```
+
+**Settled so far** (decision log D-028, D-029, D-031):
+
+- Place measures only. Ring size checks the types but never defines them.
+- Cities, suburbs and conurbations come from the continuous built-up area,
+  so St Albans (its own city) and Staines (part of London) fall apart.
+- The town line is `r fmt(DRAFT_B$town_pop_1km)` people within 1 km, which
+  matches 1988's share of towns.
+- The conurbation line sits in a gap between city sizes, with Bristol inside.
+- Historic city cores are found by a measure, with the special list as a
+  backstop.
+- Welwyn reading as a town is accepted as a known disagreement: on the
+  measures it is Old Amersham's twin.
+
+**Still open.**
+
+1. *Validation.* The lines rest on a dozen South East towers, one register
+   remark and inferred 1988 shares. Volunteers' known towers, recorded
+   before they see the class, and Richard Heys's Gloucestershire and Bristol
+   register (towers with no registered members) would test them properly.
+2. *The inner-city line* (`r fmt(DRAFT_B$inner_density)` people per km²) is
+   a density stand-in for 1988's meaning, which was partly about
+   deprivation.
+3. *Whether "Suburban" should also cover the suburbs of smaller cities*, as
+   1988's probably did (11% of towers then, against Draft B's 6%).
+4. *The special-case list* (Q-022): now a backstop, but its society and
+   university-society rows still need confirming.
 
 ## Background and brief
 
@@ -157,6 +214,11 @@ named place types. *Choosing a sampling method* then uses the types.
   `data/reference/known_towers.csv` records, for each known tower, what sort
   of place it feels like.
 - *Work outside England without rework*, and be meaningful to ringers.
+- *Identify historic city cores* (Mark, 11 October), where towers cluster
+  and bands are shared, by a measure rather than only a list. Richard Heys's
+  register shows several central Bristol ten-bell towers with no registered
+  ringers, because they are rung by a cluster band.
+- *Keep Bristol on the conurbation side* of any conurbation line.
 
 **What this chapter does not decide.** The final types, their thresholds,
 and the handling of the special-case towers. All are open questions in the
@@ -182,6 +244,10 @@ decision register (Q-022, Q-023).
   it puts `r pct(village_b)` of comparable towers in villages and
   `r pct(town_b)` in towns, against 1988's `r pct(village_88)` and
   `r pct(town_88)`. `r if (line_88 == DRAFT_B$town_pop_1km) paste0("The town line of ", fmt(DRAFT_B$town_pop_1km), " people within 1 km is the one that best matches 1988's share of towns.") else paste0("A town line of ", fmt(line_88), " people within 1 km, instead of ", fmt(DRAFT_B$town_pop_1km), ", would match 1988's share of towns more closely.")`
+- **It finds historic city cores by measure.** `r sum(frame_towers$type == "Historic city core")`
+  frame towers stand in a city centre with at least
+  `r fmt(DRAFT_B$core_other_bells)` bells at other towers within 1 km, or are
+  on the special list.
 - **It splits the villages.** `r pct(type_share[["Small village or hamlet"]])`
   of frame towers are in a small village or hamlet, with fewer than
   `r fmt(DRAFT_B$village_pop_1km)` people within 1 km. Only
@@ -396,7 +462,7 @@ knows and by comparison with 1988:
 
 | Type | Rule |
 | --- | --- |
-| Society or city-core tower | On the draft special-case list as a society, City of London or central London tower |
+| Historic city core | In an urban centre, with at least `r fmt(DRAFT_B$core_other_bells)` bells at *other* towers within 1 km; or on the special list as a society, City of London or central London tower |
 | Inner city | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, with at least `r fmt(DRAFT_B$inner_density)` people per km² of land in the `r measure_label(INNER_VAR)` |
 | Suburban | In an urban centre of at least `r fmt(DRAFT_B$conurbation_pop)` people, at lower density |
 | City or large town | In an urban centre of `r fmt(50000)` to `r fmt(DRAFT_B$conurbation_pop)` people |
@@ -411,6 +477,15 @@ per km², joined edge to edge, totalling at least 50,000 people.
 **Where each line comes from.** All are provisional, and the sensitivity
 tables below show what moving them does.
 
+- *Historic city core, `r fmt(DRAFT_B$core_other_bells)` bells at other
+  towers within 1 km* (Mark, 11 October): about four rings of eight close by.
+  Where many towers stand together in an old city centre, bands are shared,
+  and a tower can have no ringers of its own. Richard Heys's register shows
+  several central Bristol ten-bell towers with no registered ringers for
+  exactly this reason. Only *other* towers' bells count: counting the
+  tower's own bells would tie the type to its own ring size, against the
+  place-only rule (D-028). The special list remains as a backstop for the
+  few society towers the measure misses.
 - *Urban centre, 50,000 people:* the international definition, unchanged.
   Following the continuous built-up area is what separates St Albans, a city
   with its own centre, from Staines, which is part of London's.
@@ -418,12 +493,12 @@ tables below show what moving them does.
   the sizes of urban centres, so that a small change in the data cannot move
   a city across it (the table below lists the centres either side). It takes
   in London and the large metropolitan areas, which 1988 called the "major
-  conurbations", and Bristol. Bristol matters: Richard Heys's register shows
-  several of its central ten-bell towers with no registered ringers, because
-  they are rung as a cluster, as in a conurbation's centre.
-- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km²:* set so that
-  inner-city towers, with the special list, are about as common as in 1988,
-  about 2%. Density is a rough stand-in for what 1988 meant by inner city,
+  conurbations", and Bristol, as Mark wanted.
+- *Inner city, `r fmt(DRAFT_B$inner_density)` people per km²:* first set so
+  that inner-city towers, with the special list, were about as common as in
+  1988, about 2%. With the historic city cores now a type of their own, it
+  gives `r scales::label_percent(accuracy = 0.1)(mean(frame_towers$type == "Inner city"))`.
+  Still open. Density is a rough stand-in for what 1988 meant by inner city,
   which was as much about deprivation as density.
 - *Town, `r fmt(DRAFT_B$town_pop_1km)` people within 1 km:* the line that
   best matches 1988's share of towns (Mark, 11 October). It is below the
@@ -456,7 +531,9 @@ shares_vs_1988 |>
 
 Draft B maps onto 1988's types as follows: both village types to Village;
 Town to Town; City or large town to Large City; Suburban to Suburban; Inner
-city and the special list to Inner City.
+city to Inner City; Historic city core to Large City, because 1988's
+"Large City" was the type of the great city-centre churches: the most
+ringers per bell, and the most Surprise ringing.
 
 **Where Draft B still differs from 1988.** Two gaps remain.
 
@@ -594,38 +671,39 @@ centre_names |>
                                 fmt(DRAFT_B$conurbation_pop), " people"))
 ```
 
-### A candidate refinement: historic city cores
-
-Richard Heys's point about Bristol is wider than Bristol. Where many towers
-stand close together in an old city centre, bands are shared, and a tower can
-have no ringers of its own. That is a property of the place, and it can be
-measured without bells: the number of frame towers within 1 km.
+### Historic city cores
 
 ```{r}
 #| label: tbl-city-cores
 cores <- frame_towers |>
-  dplyr::filter(!is.na(.data$centre_pop), .data$towers_r1km >= 5) |>
+  dplyr::filter(.data$type == "Historic city core") |>
   dplyr::mutate(place = sub(",.*$", "", .data$display),
-                place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place))
+                place = sub(" (Cath|Minster|Abbey|Priory)\\b.*$", "", .data$place),
+                by = ifelse(!is.na(.data$centre_pop) &
+                              .data$other_bells_1km >= DRAFT_B$core_other_bells,
+                            "measure", "list only"))
 cores |>
   dplyr::summarise(towers = dplyr::n(),
+                   `found by the measure` = sum(.data$by == "measure"),
                    `on the special list` = sum(.data$society),
-                   `Draft B types` = paste(unique(as.character(.data$type)), collapse = ", "),
                    .by = "place") |>
   dplyr::arrange(dplyr::desc(.data$towers)) |>
-  knitr::kable(caption = "Frame towers in an urban centre with five or more frame towers within 1 km")
+  knitr::kable(caption = "Frame towers in historic city cores, by place")
 ```
 
-**What it shows.** `r nrow(cores)` towers meet the test, in a handful of
-historic cities. They include `r sum(cores$society)` of the
-`r sum(frame_towers$society)` towers on the special list, found without the
-list. They also show a weakness of Draft B: a city's core can be split
-between types. `r bristol_core <- dplyr::filter(cores, .data$place == "Bristol"); if (nrow(bristol_core) > 0) paste0("Bristol's ", nrow(bristol_core), " core towers fall into ", dplyr::n_distinct(bristol_core$type), " types, because the inner-city density line runs through the middle of them.") else ""`
+**What it shows.** `r nrow(cores)` frame towers are in a historic city core.
+The measure finds `r sum(cores$by == "measure")` of them without any list,
+including `r sum(cores$by == "measure" & cores$society)` of the
+`r sum(frame_towers$society)` towers on the special list. The list adds
+`r sum(cores$by == "list only")` more. Because the core is defined by its
+towers rather than by population density, a city's core is no longer split
+between types by the inner-city line, as Bristol's was in an earlier draft.
 
-**Not yet adopted.** A "historic city core" type, defined this way, could
-replace most of the special list with a measure that works anywhere. It is
-offered for Mark and the analysis volunteers to judge, ideally against
-register data on which towers have their own band.
+**Why bells at other towers, not towers.** Counting other towers' bells
+weights a neighbouring twelve more than a neighbouring five, which tracks
+the concentration of historic ringing better than a count of towers. The
+tower's own bells are left out: with them included, bells within 1 km
+correlate about 0.9 with the tower's own ring size; without them, about 0.2.
 
 ### How sensitive the types are to each line
 
@@ -750,25 +828,6 @@ frame_towers |>
   tidyr::pivot_wider(names_from = "ruc21nm", values_from = "n", values_fill = 0, names_sort = TRUE) |>
   knitr::kable(caption = "Draft B against the ONS Rural Urban Classification 2021, England and Wales")
 ```
-
-## What this suggests
-
-Provisional, for Mark and the analytical team (Q-023):
-
-1. **Adopt Draft B as the working classification.** It answers "what sort of
-   place are these bells in?" from place measures alone, separates
-   settlements by their own edges, splits the villages, and lands close to
-   1988's shares.
-2. **Report it crossed with ring size.** It contains no ring-size
-   information, so the cross is clean, and 1988's inner-city against
-   large-city contrast can be recovered from it.
-3. **Keep the society and city-core towers as a list** (Q-022).
-4. **Grow the known-towers list** before fixing the lines, especially with
-   towers outside the South East, and record each person's sense of the
-   place before they see the rules' answer.
-5. **Revisit the town and village lines after fieldwork.** Once band sizes
-   are known for the chased towers, a model-based tree can check whether
-   the lines sit where outcomes actually change.
 
 ## Methods and sources
 

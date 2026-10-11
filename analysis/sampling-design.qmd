@@ -95,7 +95,11 @@ estimate <- function(o, s, pi) {
     village_ringers  = sum(w * o$ringers[s] * in_village[s]))
 }
 
-strata <- interaction(pop$type, pop$ring_class, drop = TRUE)
+# Historic city cores are one stratum whatever their ring size: shared bands
+# make ring size a poor guide there.
+pop$ring_stratum <- ifelse(pop$type == "Historic city core", "all",
+                           as.character(pop$ring_class))
+strata <- interaction(pop$type, pop$ring_stratum, drop = TRUE)
 Nh <- table(strata)
 nh <- pmin(Nh, pmax(MIN_PER_CELL, round(n * Nh / N)))
 pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
@@ -103,7 +107,7 @@ pi_strat <- as.numeric((nh / Nh)[as.character(strata)])
 # Sort order for the systematic design: type, then ring class, then density,
 # reversing direction in alternate groups ("serpentine") so neighbours in the
 # list stay similar across group boundaries.
-grp <- as.integer(interaction(pop$type, pop$ring_class, lex.order = TRUE, drop = TRUE))
+grp <- as.integer(interaction(pop$type, pop$ring_stratum, lex.order = TRUE, drop = TRUE))
 sys_order <- order(grp, ifelse(grp %% 2 == 0, -1, 1) * log10(pop[[LOCAL_VAR]]))
 
 # Place measures plus ring size. "Growth since the bells" is left out: it is
@@ -160,9 +164,10 @@ design_rank <- perf |>
   dplyr::arrange(.data$mean_rel)
 robust_design <- design_rank$design[[1]]
 
-# Stratum cells: type x ring size.
+# Stratum cells: type x ring size (city cores as one stratum).
 cells <- pop |>
-  dplyr::count(.data$type, .data$ring_class) |>
+  dplyr::count(.data$type, ring_class = factor(.data$ring_stratum,
+                                               levels = c(levels(pop$ring_class), "all"))) |>
   dplyr::mutate(expected = .data$n / N * N_CHASED)
 n_cells_small <- sum(cells$expected < 10)
 ```
@@ -170,6 +175,38 @@ n_cells_small <- sum(cells$expected < 10)
 *Prepared by Mark Ainsworth with Claude (Anthropic). Mark set the questions
 and made the decisions; Claude drafted the code and text, which Mark
 reviewed.*
+
+## Where this stands
+
+*Mark's take, drafted by Claude from Mark's decisions. Tentative: to be
+tested with the other analysis volunteers.*
+
+**Current recommendation.** Draw the chased sample stratified by place type
+and ring size, with proportional allocation:
+
+- Strata are the seven place types from *Choosing a classification*,
+  crossed with ring size (4–5, 6–7, 8–9, 10+).
+- Cells expecting fewer than about 10 chased towers are merged with a
+  neighbour of the same ring size (inner city with suburban, for example).
+- The historic city cores form one stratum, whatever their ring size,
+  because their shared bands make ring size a poor guide there.
+- Results are reported by place type crossed with ring size, which maps onto
+  1988's tables.
+
+**Why stratified, when the designs are close.** In the simulation it had the
+lowest average error, and the designs that use the types are within noise of
+each other. It is the easiest to explain to delegates ("we drew X villages
+with six bells"), it matches the implementation design's "stratified by
+bells x rurality", and its variance estimation is standard.
+
+**Still open.**
+
+1. *Re-run this simulation on the full context data* (script 08 as run on
+   Mark's machine), with the settled lines.
+2. *The exact merging of small cells*, to fix before the draw.
+3. *Whether to over-sample the small villages and hamlets.* If they hold
+   most of the towers without a band, more of them would sharpen that
+   estimate, at the cost of unequal weights. The current plan says no.
 
 ## Background and brief
 
@@ -331,15 +368,16 @@ proportional allocation.
 cells |>
   dplyr::mutate(cell = paste0(.data$n, " (", round(.data$expected), ")")) |>
   dplyr::select("type", "ring_class", "cell") |>
-  tidyr::pivot_wider(names_from = "ring_class", values_from = "cell", values_fill = "0",
+  tidyr::pivot_wider(names_from = "ring_class", values_from = "cell", values_fill = "",
                      names_sort = TRUE) |>
   dplyr::arrange(.data$type) |>
   knitr::kable(caption = paste0("Frame towers by type and ring size (expected chased towers at n = ", fmt(N_CHASED), ")"))
 ```
 
-The small cells are mostly the urban types with small rings, and the society
-towers. They can be merged with their neighbours (inner city with suburban,
-for example), or drawn with certainty.
+The small cells are mostly the urban types with small rings, and the
+historic city cores. They can be merged with their neighbours (inner city
+with suburban, for example), or drawn as one stratum regardless of ring
+size.
 
 ## Practical differences the simulation does not show
 
@@ -354,23 +392,6 @@ of the towers listed in an updated computer version of Dove's guide,
 arranged alphabetically", and checked afterwards that ring sizes and regions
 were fairly represented. The settlement types were used for analysis, not
 for drawing the sample.
-
-## What this suggests
-
-Provisional, for the analytical team and the committee (Q-023):
-
-1. **Use a design that draws on the place types and the measures,** rather
-   than simple random sampling. On these results the strongest is
-   **`r robust_design`**. The practical table should weigh as much as the
-   error figures, because the differences between these designs are modest
-   next to the gain over simple random sampling.
-2. **Whatever the design, report results by place type crossed with ring
-   size.** The types contain no ring-size information, so the cross is
-   clean, and they map onto 1988's types.
-3. **Draw the society and city-core towers with certainty** or as their own
-   small stratum (Q-022). They are few, unusual and recognisable by name.
-4. **Re-run this simulation** once the classification's lines are settled,
-   since the types feed every design.
 
 ## Methods and sources
 

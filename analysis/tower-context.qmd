@@ -61,6 +61,39 @@ n_missing_context <- sum(frame$frame_full) -
 and made the decisions; Claude drafted the code and text, which Mark
 reviewed.*
 
+## Where this stands
+
+*Mark's take, drafted by Claude from Mark's decisions. Tentative: to be
+tested with the other analysis volunteers.*
+
+**What this chapter establishes, and what it feeds into the classification.**
+
+- **A tower's own place is best described at the scale of its core,** about
+  1 km. Ring size tracks density most closely there, which fits the church
+  standing at the historic heart of its settlement. *Used for:* the town,
+  village and hamlet lines (people within 1 km).
+- **Cities need the settlement's own edge, not a radius.** Continuous
+  built-up areas, traced with the international Degree of Urbanisation's
+  rules, separate a free-standing city from a suburb where distance measures
+  cannot. *Used for:* city, suburban and inner-city types.
+- **Ring size is a record of history, and a check, not an input.** Larger
+  rings need a denser core. Rings of 12 may belong to a slightly wider area,
+  which fits the idea that heavier bells were about earshot, but the evidence
+  is weak and confounded with city size.
+- **Many towns have grown around their bells,** mostly in London. The
+  one-sided model measures it, and it is kept as a descriptive measure.
+- **Settlement is a continuum.** The towers form no natural clusters, so the
+  types are chosen for meaning and communication.
+
+**Still open, and deliberately parked.**
+
+1. *The earshot test within one ring size,* using tenor weight from Dove.
+   Parked to keep this simple; bell-metal density likewise.
+2. *Whether a market-town interaction is real.* An unpruned tree hints that a
+   moderately dense core means more in sparse surroundings; cross-validation
+   does not support it.
+3. *Which population epoch* (Q-021): 2020 is in use.
+
 ## Background and brief
 
 **Where this fits.** The census will chase about 1,000 randomly drawn towers
@@ -1063,20 +1096,6 @@ tw |>
   tidyr::pivot_wider(names_from = "smod_class", values_from = "n", values_fill = 0, names_sort = TRUE) |>
   knitr::kable(caption = "Frame towers by region and Degree of Urbanisation")
 ```
-
-## For the analytical team
-
-Questions this chapter is meant to help answer:
-
-1. **Which scale describes a tower's own place?** The ring-size peak points
-   to a core of about `r fmt(best_scale$half_mass)` m. Is that the right
-   scale for "own settlement", or should it be chosen on other grounds?
-2. **Kernels or circles?** At the core scale they agree once placed by their
-   real reach. Use whichever is easier to explain there; prefer kernels for
-   wide catchments.
-3. **Is "growth since the bells" worth keeping** as a measure of absorbed
-   villages, alongside the contiguous-settlement measures?
-4. **Do the special-case towers need a list?** The clusters suggest so.
 
 ## Methods and sources
 

@@ -63,8 +63,13 @@ DRAFT_A <- list(town_density = 300, town_pop = 5000,
 #   village_pop_1km: below this, a small village or hamlet. 500 is the
 #     smallest population the Degree of Urbanisation counts as a rural
 #     cluster, its nearest thing to a village.
-DRAFT_B <- list(conurbation_pop = 575000, inner_density = 7000,
-                town_pop_1km = 1500, village_pop_1km = 500)
+#   core_other_bells: a tower inside an urban centre with at least this many
+#     bells at OTHER frame towers within 1 km is in a historic city core
+#     (Mark, 2026-10-11). 30 is about four rings of eight. Other towers'
+#     bells, not all bells: the tower's own bells would tie the class to its
+#     own ring size (D-028).
+DRAFT_B <- list(core_other_bells = 30, conurbation_pop = 575000,
+                inner_density = 7000, town_pop_1km = 1500, village_pop_1km = 500)
 INNER_VAR <- "density_land_k500m"
 
 # Special-list categories treated as "society or city-core" towers (Q-022).
@@ -89,7 +94,7 @@ PAL_SMOD <- c("Very low density rural"   = "#86b6ef",
               "Water"                    = "#9a9a9a")
 TYPE_LEVELS <- c("Small village or hamlet", "Village", "Town",
                  "City or large town", "Suburban", "Inner city",
-                 "Society or city-core tower")
+                 "Historic city core")
 PAL_TYPE <- stats::setNames(PAL_CAT[c(3, 1, 4, 2, 5, 7, 8)], TYPE_LEVELS)
 TYPE_LEVELS_A <- c("Village", "Village in a built-up region",
                    "Town", "Town in a built-up region",
@@ -154,6 +159,9 @@ towers <- frame |>
     isolation  = log10(.data[[LOCAL_VAR]] / .data[[REGION_VAR]]),
     coast      = 1 - .data$land_share_k8km,
     society    = !is.na(.data$special) & .data$special %in% SOCIETY_CATEGORIES,
+    # Bells within 1 km at OTHER frame towers. bells_r1km counts frame towers
+    # only, so a frame tower's own bells are subtracted; others never counted.
+    other_bells_1km = .data$bells_r1km - ifelse(.data$in_frame, .data$bells, 0),
     smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
     british_isles = .data$country %in% BRITISH_ISLES
   ) |>
@@ -180,7 +188,7 @@ towers <- towers |>
                                    .data[[REGION_VAR]], .data$society, DRAFT_A,
                                    TYPE_LEVELS_A),
     type = classify_settlement_b(.data$centre_pop, .data[[INNER_VAR]], .data$pop_r1km,
-                                 .data$society, DRAFT_B, TYPE_LEVELS)
+                                 .data$other_bells_1km, .data$society, DRAFT_B, TYPE_LEVELS)
   )
 bi <- dplyr::filter(towers, .data$british_isles)
 frame_towers <- dplyr::filter(towers, .data$in_frame)
@@ -197,5 +205,5 @@ crosswalk_1988 <- c(
   "City or large town"         = "Large City",
   "Suburban"                   = "Suburban",
   "Inner city"                 = "Inner City",
-  "Society or city-core tower" = "Inner City"
+  "Historic city core"         = "Large City"
 )
