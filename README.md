@@ -139,8 +139,19 @@ named snapshots.
 **The cache does not notice everything.** Quarto re-runs a chapter only when
 the chapter's own file changes. It does not notice a change to
 `analysis/_common.R`, to a function in `R/`, or to the data (for example
-after re-running script 08). After any of those, re-render with
-`quarto render analysis/ --cache-refresh`.
+after re-running script 08). After any of those, either:
+
+- render the affected chapters one at a time, for example
+  `quarto render analysis/settlement-classes.qmd`. Rendering a single file
+  always re-runs its code, frozen or not; or
+- delete `analysis/_freeze/` and render the whole book.
+
+`--cache-refresh` does not do this: it refreshes knitr's chunk cache, which
+this project does not use, not Quarto's freeze.
+
+**Preview renders the whole book.** Preview (the button, or `quarto
+preview`) serves the entire book and renders every chapter that needs it. To
+work on one chapter, use `quarto render` on that file instead.
 
 Two set-up details make rendering work, because Quarto runs R from inside
 each folder rather than the repository root:
@@ -201,7 +212,7 @@ Contributors using Claude will find more detailed working rules in
 | Quarto said `knitr` or `rmarkdown` was missing | The folder's `.Rprofile` is missing; renv was not active |
 | Quarto could not find `scripts/00_setup.R` | The chapter lacks its `here::i_am()` line |
 | Script 08 stopped on a GHSL land tile's extent | Fixed. Land tiles are trimmed where mostly sea; the check now accepts that |
-| A chapter showed old numbers after script 08 was re-run | The cache does not notice data changes. Re-render with `--cache-refresh` |
+| A chapter showed old numbers after script 08 was re-run | The freeze does not notice data changes. Render each chapter on its own, or delete `analysis/_freeze/` first |
 
 After installing a package, run `renv::snapshot()`. Before committing, run
 `renv::status()`. A package used but never snapshotted works on your machine

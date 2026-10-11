@@ -121,7 +121,7 @@ classify_settlement_b <- function(centre_pop, inner_d, pop1k, society, th, level
 #' per km2 of land, and repeated splits on one measure are merged into a
 #' single range. Measure names are read with measure_label().
 #'
-#' @return Tibble: rule, towers, share (of the second class).
+#' @return Tibble: rule, towers, share (raw share of the second class).
 leaf_rules <- function(tree) {
   leaves <- as.integer(rownames(tree$frame)[tree$frame$var == "<leaf>"])
   paths  <- rpart::path.rpart(tree, nodes = leaves, print.it = FALSE)
@@ -152,6 +152,8 @@ leaf_rules <- function(tree) {
   tibble::tibble(
     rule   = vapply(paths, \(p) describe(p[-1]), ""),
     towers = fr$n,
-    share  = fr$yval2[, 5]
+    # Raw share of the second class in the leaf. Not yval2[, 5], which is
+    # adjusted by the tree's priors when they are not the observed shares.
+    share  = fr$yval2[, 3] / (fr$yval2[, 2] + fr$yval2[, 3])
   ) |> dplyr::arrange(.data$share)
 }

@@ -606,69 +606,172 @@ for every purpose. Recruitment depends on the wider catchment, which ring
 size does not measure. Choosing a scale because it tracks ring size best
 would also bring ring size back into the place measures by another route.
 
-### A decision tree as a diagnostic
+### Decision trees: what separates 8, 10 and 12 bells
 
 A classification tree (CART)^[Breiman, Friedman, Olshen & Stone (1984). See
 *Methods and sources*.] splits the towers again and again on whichever
-measure best separates rings of 8 or more from smaller rings. It finds
-thresholds and interactions on its own: for example, whether a dense core
-matters more when the area around it is sparse. Two choices keep it honest:
+measure best separates large rings from smaller ones. It finds thresholds
+and interactions on its own: for example, whether a dense core matters more
+when the area around it is sparse.
+
+**Why three trees.** One tree each separates rings of 8 or more, 10 or more,
+and 12 or more from the rest. If the drivers differ, that says something
+about what each size of ring belonged to. One idea worth testing (Mark, 11
+October): bells were historically about earshot. Heavier rings carry
+further, so if earshot shaped where large rings were hung, the trees for 10
+and 12 should lean on *wider* kernels than the tree for 8. If instead large
+rings belong to the size and wealth of a settlement's core, all three should
+lean on the tight kernels.
+
+**Choices that keep them honest and comparable.**
 
 - **Kernels only.** Kernels and circles of similar reach are nearly
-  interchangeable. Offering both lets the tree pick between near-twins,
-  which spreads the importance between them and makes it hard to read
-  (Mark, 10 October). The coast is the one other measure offered, because it
-  is not a distance measure. Isolation is left out: it is a ratio of two
-  scales, and finding how scales combine is the tree's job.
-- **A diagnostic only.** Its target is ring size, so using its splits as
+  interchangeable. Offering both lets a tree pick between near-twins, which
+  spreads the importance between them and makes it hard to read (Mark, 10
+  October). The coast is the one other measure offered, because it is not a
+  distance measure. Isolation is left out: it is a ratio of two scales, and
+  finding how scales combine is the tree's job.
+- **Equal weight to both sides.** Rings of 12 are rare, so a tree left to
+  itself would mostly learn to say "not 12". Each tree is told to treat the
+  two classes as equally common (equal priors), so all three are judged on
+  the same footing. The group tables still show the raw shares.
+- **The same settings for all three.** The smallest group allowed is 30
+  towers, and each tree is pruned back to the simplest one whose
+  cross-validated error is within one standard error of the best (the usual
+  "one-SE rule"), so a tree for a rare class cannot chase noise.
+- **Credit only for the splits actually used.** A tree can also credit
+  measures that would have made nearly as good a split ("surrogates").
+  Near-twin kernels then share the credit, which blurs the question of
+  scale, so surrogates are switched off.
+- **A diagnostic only.** The target is ring size, so using the splits as
   classes would build ring size back into the classification.
 
 ```{r}
-#| label: tree
-tree_data <- bi |>
+#| label: trees
+tree_base <- bi |>
   dplyr::filter(.data$in_frame) |>
   dplyr::select("bells", dplyr::matches("^density_land_k[0-9]+(m|km)$"), "coast") |>
-  dplyr::mutate(
-    ring_8_plus = factor(.data$bells >= 8, levels = c(FALSE, TRUE),
-                         labels = c("under 8", "8 or more")),
-    dplyr::across(dplyr::starts_with("density_land_"), \(x) log10(x))
-  ) |>
-  dplyr::select(-"bells") |>
-  dplyr::filter(dplyr::if_all(dplyr::everything(), \(x) !is.numeric(x) | is.finite(x)))
-set.seed(2026)  # the cross-validation folds are random
-tree <- rpart::rpart(ring_8_plus ~ ., data = tree_data, method = "class",
-                     control = rpart::rpart.control(cp = 0.004, minbucket = 50))
-cp_tab <- as.data.frame(tree$cptable)
-importance <- round(100 * tree$variable.importance / sum(tree$variable.importance))
-tree_label <- \(v) ifelse(grepl("^density_land_", v), measure_label(ifelse(grepl("^density_land_", v), v, "k1km")), v)
+  dplyr::mutate(dplyr::across(dplyr::starts_with("density_land_"), \(x) log10(x))) |>
+  dplyr::filter(dplyr::if_all(dplyr::everything(), is.finite))
+tree_label <- \(v) ifelse(grepl("^density_land_", v),
+                          measure_label(ifelse(grepl("^density_land_", v), v, "k1km")), v)
+reach_of <- \(v) ifelse(grepl("^density_land_", v),
+                        measure_half_mass_m(ifelse(grepl("^density_land_", v), v, "k1km")), NA)
 
-leaves <- leaf_rules(tree)
-leaves |>
-  dplyr::transmute(`towers in the group` = .data$rule, towers = .data$towers,
-                   `rings of 8 or more` = pct(.data$share)) |>
-  knitr::kable(caption = "The tree's groups, from fewest to most rings of 8 or more (people per km² of land)")
+fit_tree <- function(k) {
+  d <- tree_base |>
+    dplyr::mutate(target = factor(.data$bells >= k, levels = c(FALSE, TRUE),
+                                  labels = c(paste("under", k), paste(k, "or more")))) |>
+    dplyr::select(-"bells")
+  set.seed(2026)  # the cross-validation folds are random
+  tr <- rpart::rpart(target ~ ., data = d, method = "class",
+                     parms = list(prior = c(0.5, 0.5)),
+                     control = rpart::rpart.control(cp = 0.002, minbucket = 30,
+                                                    maxsurrogate = 0))
+  # Prune by the one-standard-error rule: the smallest tree whose
+  # cross-validated error is within one standard error of the best.
+  ct <- tr$cptable
+  best <- which.min(ct[, "xerror"])
+  ok <- which(ct[, "xerror"] <= ct[best, "xerror"] + ct[best, "xstd"])[1]
+  tr <- rpart::prune(tr, cp = ct[ok, "CP"] * 1.0001)
+  imp <- tr$variable.importance / sum(tr$variable.importance)
+  cp  <- as.data.frame(tr$cptable)
+  first <- tr$frame$var[1]
+  list(k = k, tree = tr, leaves = leaf_rules(tr), importance = imp,
+       positives = sum(d$target == levels(d$target)[2]),
+       first = first,
+       first_at = 10^tr$splits[first, "index"],
+       splits = max(cp$nsplit),
+       cv_gain = 1 - min(cp$xerror),
+       # Importance-weighted reach: where, on average, the tree looks.
+       reach = sum(imp[grepl("^density_land_", names(imp))] *
+                     reach_of(names(imp)[grepl("^density_land_", names(imp))])) /
+               sum(imp[grepl("^density_land_", names(imp))]))
+}
+trees <- purrr::map(c(8, 10, 12), fit_tree)
+names(trees) <- paste0(c(8, 10, 12), "+")
+
+tibble::tibble(
+  target = paste(names(trees), "bells"),
+  `towers in that class` = purrr::map_int(trees, "positives"),
+  `first split` = purrr::map_chr(trees, \(t) paste0(tree_label(t$first), " at ", fmt(t$first_at))),
+  splits = purrr::map_dbl(trees, "splits"),
+  `its reach (m)` = fmt(purrr::map_dbl(trees, \(t) reach_of(t$first))),
+  `error cut on cross-validation` = pct(purrr::map_dbl(trees, "cv_gain"))
+) |>
+  knitr::kable(caption = "Three trees compared (first split in people per km² of land)")
 ```
 
 ```{r}
-#| label: tbl-tree-importance
-tibble::tibble(measure = tree_label(names(importance)),
-               `importance (%)` = as.numeric(importance)) |>
-  knitr::kable(caption = "Which measures the tree leans on")
+#| label: fig-tree-reach
+#| fig-height: 4
+#| fig-cap: "Rank correlation between being in each ring-size class and land density, against each kernel's reach (radius holding half its weight). British Isles frame towers."
+reach_cor <- tidyr::expand_grid(
+  k = c(8, 10, 12),
+  column = grep("^density_land_k[0-9]+(m|km)$", names(tree_base), value = TRUE)
+) |>
+  dplyr::mutate(
+    reach = measure_half_mass_m(.data$column),
+    spearman = purrr::map2_dbl(.data$k, .data$column, \(k, v)
+      stats::cor(as.numeric(tree_base$bells >= k), tree_base[[v]], method = "spearman")),
+    class = factor(paste0(.data$k, "+ bells"), levels = paste0(c(8, 10, 12), "+ bells"))
+  )
+reach_peak <- reach_cor |> dplyr::slice_max(.data$spearman, n = 1, by = "class")
+ggplot(reach_cor, aes(reach, spearman, colour = class)) +
+  geom_line(linewidth = 0.6) +
+  geom_point(size = 2) +
+  scale_x_log10(labels = scales::label_comma()) +
+  scale_colour_manual(values = stats::setNames(PAL_CAT[1:3], levels(reach_cor$class)), name = NULL) +
+  labs(x = "Radius holding half the kernel's weight (m)", y = "Spearman correlation")
 ```
 
-**What the tree finds.** The first split, on the
-`r tree_label(names(importance)[1])`, does most of the work. It alone cuts
-misclassification by `r pct(1 - cp_tab[["rel error"]][2])` against always
-guessing the commoner class. The full tree has `r max(cp_tab$nsplit)`
-splits and, on cross-validation, cuts misclassification by
-`r pct(1 - min(cp_tab[["xerror"]]))`. The later splits add little
-accuracy, but they are where any interaction between scales shows.
+**Where each tree looks.** Pruned to what cross-validation supports, each
+tree keeps `r if (all(purrr::map_dbl(trees, "splits") == 1)) "a single split" else "only a few splits"`.
+The tree for 8 or more splits on the `r tree_label(trees[["8+"]]$first)` at
+`r fmt(trees[["8+"]]$first_at)` people per km² of land; for 10 or more, on
+the `r tree_label(trees[["10+"]]$first)` at `r fmt(trees[["10+"]]$first_at)`;
+for 12 or more, on the `r tree_label(trees[["12+"]]$first)` at
+`r fmt(trees[["12+"]]$first_at)`. The simple correlations in the figure peak
+at `r paste0(fmt(reach_peak$reach), " m for ", reach_peak$class, collapse = "; ")`.
+`r ties <- reach_cor |> dplyr::group_by(.data$class) |> dplyr::summarise(flat = sum(.data$spearman >= max(.data$spearman) - 0.005), kept = .data$spearman[.data$column == "density_land_k2km"] / max(.data$spearman)); paste0("But the peaks are shallow: for ", paste(ties$class[ties$flat > 1], collapse = " and "), " the two tightest kernels score within 0.005 of each other, so a peak's position is not a reliable signal. The decay is more telling. At the 2 km kernel, the correlation keeps ", paste0(pct(ties$kept), " of its peak for ", ties$class, collapse = ", "), ". ", if (ties$kept[3] > ties$kept[1] + 0.05) "Larger rings hold their link with density further out, which is what the earshot idea predicts, though only mildly." else "Larger rings do not hold their link with density further out, which counts against earshot as the main story.")`
+The density at the split also rises with ring size: larger rings need a
+denser core, as well as perhaps a wider one.
+
+**The strongest case against reading this as earshot.** First, the step is
+small: one notch on a grid of six kernels, each double the last, resting on
+`r trees[["12+"]]$positives` towers. Second, rings of 12 stand
+mostly in cities, and a city's core is wider than a village's. So a scale
+that widens for larger rings may mean only that larger rings sit in larger
+places, whatever their sound carried. Separating the two needs a comparison
+*within* one ring size: among rings of 8, do the heavier ones belong to a
+wider area? Tenor weight is in Dove, but not yet in the frame.
+
+The trees for larger rings rest on fewer towers, so their splits are less
+stable: read their groups as suggestions.
+
+**The groups each tree finds.** Shares are the raw share of towers in the
+class, not adjusted for the equal weighting.
+
+```{r}
+#| label: tbl-tree-leaves
+#| results: asis
+for (nm in names(trees)) {
+  t <- trees[[nm]]
+  print(knitr::kable(
+    t$leaves |> dplyr::transmute(`towers in the group` = .data$rule, towers = .data$towers,
+                                 share = pct(.data$share)) |>
+      dplyr::rename(!!paste("rings of", sub("\\+", " or more", nm)) := "share"),
+    caption = paste0("Tree for ", sub("\\+", " or more", nm), " bells: its groups, fewest first (people per km² of land)")))
+  cat("\n\n")
+}
+```
 
 ```{r}
 #| label: tree-interaction
 #| include: false
-# Look for the typical interaction: two groups sharing a range on one measure
-# and split on a second, wider one.
+# Look for the typical interaction in the 8+ tree: two groups sharing a range
+# on one measure and split on a second, wider one.
+leaves <- trees[["8+"]]$leaves
 pair <- leaves |>
   dplyr::filter(grepl(";", .data$rule)) |>
   dplyr::mutate(core = sub(";.*$", "", .data$rule),
@@ -683,7 +786,7 @@ if (interaction) {
 say <- \(x) sub("(kernel|circle) ", "\\1 is ", x)   # "1 km kernel under 420" -> "... is under 420"
 ```
 
-`r if (interaction) paste0("**It finds one.** Among towers where the ", say(pair$core[1]), " people per km² of land, those where the ", say(sparse$wider), " have ", pct(sparse$share), " rings of 8 or more, against ", pct(dense$share), " where the ", say(dense$wider), ". ", if (sparse$share > dense$share) "The same core density means more where the surroundings are sparse. That is the free-standing market town against the village absorbed into a larger place: alike at the church, different in history. A place classification that separates the two, without using bells, is on the right lines." else "Here denser surroundings go with larger rings.") else "**No clean interaction** between scales shows in this tree: read its groups directly."`
+`r if (interaction) paste0("**The tree for 8 or more finds an interaction.** Among towers where the ", say(pair$core[1]), " people per km² of land, those where the ", say(sparse$wider), " have ", pct(sparse$share), " rings of 8 or more, against ", pct(dense$share), " where the ", say(dense$wider), ". ", if (sparse$share > dense$share) "The same core density means more where the surroundings are sparse. That is the free-standing market town against the village absorbed into a larger place: alike at the church, different in history. A place classification that separates the two, without using bells, is on the right lines." else "Here denser surroundings go with larger rings.") else "**No interaction between scales survives pruning.** An unpruned tree for 8 or more does split again on wider kernels, suggesting that a moderately dense core means more where its surroundings are sparse, the free-standing market town against the absorbed village. But cross-validation does not support those extra splits, so treat that pattern as a hint, not a finding."`
 
 **The better use of trees comes after fieldwork.** Once the census measures
 band size and response for the chased towers, a model-based tree^[Hothorn,

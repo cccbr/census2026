@@ -7,8 +7,9 @@
 #
 # FREEZE WARNING. Quarto's freeze re-runs a chapter only when the chapter's own
 # .qmd changes. It does not notice changes to this file. After editing it,
-# re-render with:  quarto render analysis/ --cache-refresh
-# (or delete analysis/_freeze/).
+# render each chapter on its own (quarto render analysis/<chapter>.qmd),
+# which always re-runs the code, or delete analysis/_freeze/ and render the
+# book. --cache-refresh does NOT clear the freeze.
 #
 # The leading underscore stops Quarto treating this file as a chapter.
 

@@ -24,6 +24,7 @@ The first three chapters prepare the chased sample:
    the chased sample.
 
 All three share their data and provisional choices through
-`analysis/_common.R`. After changing that file, re-render with
-`quarto render analysis/ --cache-refresh`, because Quarto's freeze does not
-notice it.
+`analysis/_common.R`. Quarto's freeze does not notice changes to that file,
+so after changing it, render each chapter on its own
+(`quarto render analysis/<chapter>.qmd`), or delete `analysis/_freeze/`
+first.
