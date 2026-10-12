@@ -101,6 +101,8 @@ rows <- shown |>
     dc_m  = .data$retail_d_t4_m,                     # metres to a District Centre or larger
     nres  = round(.data[[NRES_VAR]], 3),             # non-residential share
     nres_ratio = round(.data$nres_ratio, 2),         # ... against its built-up area's
+    pop1k = signif(.data$pop_r1km, 2),               # people within 1 km
+    settle = signif(.data$urban_pop, 3),             # urban cluster population, if any
     centre = .data$centre,
     towers_1km = round(.data$towers_1km),
     cl    = as.integer(.data$tower_cluster),         # 1 = in a tower cluster

@@ -115,7 +115,7 @@ TYPE_LEVELS <- c("Small village or hamlet", "Village", "Town",
 # Each settlement's suburb is a lighter shade of its centre's colour.
 # Greens for the countryside (pale for the smallest places), amber for towns,
 # reds for cities (light for suburbs), purples for conurbations (Mark).
-PAL_TYPE <- stats::setNames(c("#a8dba8", "#2e9e4f", PAL_CAT[4], "#e0938b", "#c0392b",
+PAL_TYPE <- stats::setNames(c("#8fcb8a", "#3f9a33", PAL_CAT[4], "#e0938b", "#c0392b",
                               "#a99be8", PAL_CAT[7]), TYPE_LEVELS)
 TYPE_LEVELS_A <- c("Village", "Village in a built-up region",
                    "Town", "Town in a built-up region",
