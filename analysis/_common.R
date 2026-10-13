@@ -32,11 +32,7 @@ PAL_SMOD <- c("Very low density rural"   = "#86b6ef",
               "Dense urban cluster"      = "#184f95",
               "Urban centre"             = "#0d366b",
               "Water"                    = "#9a9a9a")
-# Each settlement's suburb is a lighter shade of its centre's colour.
-# Greens for the countryside (pale for the smallest places), amber for towns,
-# reds for cities (light for suburbs), purples for conurbations (Mark).
-PAL_TYPE <- stats::setNames(c("#8fcb8a", "#3f9a33", PAL_CAT[4], "#e0938b", "#c0392b",
-                              "#a99be8", PAL_CAT[7]), TYPE_LEVELS)
+PAL_TYPE <- stats::setNames(TYPE_COLOURS, TYPE_LEVELS)   # config/choices.R
 
 ggplot2::theme_set(
   ggplot2::theme_minimal(base_size = 11) +
@@ -76,51 +72,12 @@ if (length(missing_cols) > 0) {
 
 # One row per tower with a ringable full-circle ring of 3 or more bells, in
 # any country that has frame towers. `in_frame` marks the sampling frame.
-towers <- frame |>
-  dplyr::filter(.data$is_ringable, .data$is_fullcircle, .data$bells >= 3) |>
-  dplyr::summarise(
-    bells    = if (MULTI_RING_BELLS == "max") max(.data$bells) else sum(.data$bells),
-    in_frame = any(.data$frame_full),
-    country  = dplyr::first(.data$country),
-    county   = dplyr::first(.data$county),
-    display  = dplyr::first(.data$display),
-    .by = "tower_id"
-  ) |>
-  dplyr::inner_join(locations, by = "tower_id") |>
-  dplyr::inner_join(context |> dplyr::select(-"in_frame"), by = "tower_id") |>
-  dplyr::left_join(retail, by = "tower_id") |>
-  dplyr::left_join(
-    special |> dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
-      dplyr::select("tower_id", special = "category"),
-    by = "tower_id"
-  ) |>
-  dplyr::mutate(
-    ring_class = cut(.data$bells, RING_BREAKS, RING_LABELS),
-    ld         = log10(.data[[DENSITY_VAR]]),
-    # +1 person per km2 keeps places with nobody within the tight kernel
-    # finite; it is negligible anywhere people live.
-    isolation  = log10((.data[[TIGHT_VAR]] + 1) / (.data[[REGION_VAR]] + 1)),
-    coast      = 1 - .data$land_share_k8km,
-    society    = !is.na(.data$special) & .data$special %in% SOCIETY_CATEGORIES,
-    # Bells within 1 km at OTHER frame towers. bells_r1km counts frame towers
-    # only, so a frame tower's own bells are subtracted; others never counted.
-    other_bells_1km = .data$bells_r1km - ifelse(.data$in_frame, .data$bells, 0),
-    # People within reach by car but beyond walking distance (D-037).
-    beyond_walk = (.data$pop_k2km - .data$pop_k250m) /
-      (.data$land_km2_k2km - .data$land_km2_k250m),
-    # Frame towers within 1 km, the tower itself included. towers_r1km counts
-    # frame towers only, so a tower outside the frame adds itself.
-    towers_1km = .data$towers_r1km + ifelse(.data$in_frame, 0, 1),
-    smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)),
-    british_isles = .data$country %in% BRITISH_ISLES,
-    # The UK: Great Britain plus the six counties of Northern Ireland (Dove
-    # files the whole island of Ireland as one country).
-    uk = .data$country %in% c("England", "Wales", "Scotland") |
-      (.data$country == "Island of Ireland" &
-         .data$county %in% c("Antrim", "Armagh", "Down", "Fermanagh", "Derry",
-                             "Londonderry", "Tyrone"))
-  ) |>
-  dplyr::filter(is.finite(.data$ld))
+# assemble_towers() is in R/towers.R, shared with scripts/B05.
+towers <- assemble_towers(frame, locations, context, retail, special,
+                          MULTI_RING_BELLS, SOCIETY_CATEGORIES,
+                          DENSITY_VAR, TIGHT_VAR, REGION_VAR) |>
+  dplyr::mutate(ring_class = cut(.data$bells, RING_BREAKS, RING_LABELS),
+                smod_class = factor(.data$smod_class, levels = names(PAL_SMOD)))
 
 # ---- one-sided model: ring size against density, British Isles only --------
 # The link between ring size and settlement is a British and Irish history.
@@ -141,30 +98,27 @@ towers <- towers |>
     u     = jlms_u(.data$resid, sfa$sv, sfa$su),
     type_a = classify_settlement_a(.data[[DRAFT_A_LOCAL_VAR]], .data$pop_r2km, .data$pop_r5km,
                                    .data[[REGION_VAR]], .data$society, DRAFT_A,
-                                   TYPE_LEVELS_A),
-    # An identifier for each urban centre (its population and area together),
-    # and its average density (people per km2 of its 1 km cells).
-    centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
-                        paste(round(.data$centre_pop), .data$centre_km2)),
-    centre_density = .data$centre_pop / .data$centre_km2
-  )
+                                   TYPE_LEVELS_A)
+  ) |>
+  # Draft C, by the same function scripts/B05 uses to save the classification.
+  classify_towers(LOCAL_VAR, NRES_VAR, DRAFT_C, TYPE_LEVELS, crosswalk_1988)
 
-towers <- towers |>
-  dplyr::mutate(
-    # The non-residential share round the church against its whole urban
-    # centre's: above 1, more commercial than its town as a whole.
-    nres_ratio = .data[[NRES_VAR]] / .data$centre_nres_share,
-    # On or by a high street (UK only; NA abroad, where retail centres are not
-    # mapped and the non-residential share is used instead).
-    retail_near = retail_near(dplyr::pick(dplyr::starts_with("retail_d_t")), DRAFT_C),
-    type = classify_settlement_c(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
-                                 .data$retail_near, .data$nres_ratio, .data$towers_1km,
-                                 .data$in_frame, DRAFT_C, TYPE_LEVELS),
-    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_C),
-    # 1988's five types. Tower clusters go to "Large City": 1988's type of the
-    # great city-centre churches, with the most ringers per bell.
-    type_1988 = ifelse(.data$tower_cluster, "Large City", unname(crosswalk_1988[as.character(.data$type)]))
-  )
+# The saved classification is what the map and the sample draw read. If the
+# chapters now classify differently (choices changed, B05 not re-run), say so.
+classes_file <- cur("tower_classes")
+if (fs::file_exists(classes_file)) {
+  saved <- arrow::read_parquet(classes_file) |> dplyr::select("tower_id", saved_type = "type")
+  n_diff <- towers |> dplyr::inner_join(saved, by = "tower_id") |>
+    dplyr::filter(as.character(.data$type) != .data$saved_type) |> nrow()
+  if (n_diff > 0) {
+    message(n_diff, " towers differ from the saved classification in ", classes_file,
+            ". Re-run scripts/B05_build_tower_classes.R before publishing the map ",
+            "or drawing the sample.")
+  }
+} else {
+  message("No saved classification yet: run scripts/B05_build_tower_classes.R.")
+}
+
 bi <- dplyr::filter(towers, .data$british_isles)
 frame_towers <- dplyr::filter(towers, .data$in_frame)
 type_share <- prop.table(table(frame_towers$type))

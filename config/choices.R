@@ -96,6 +96,12 @@ SOCIETY_CATEGORIES <- c("society_steeple_keeper", "city_of_london_other",
 TYPE_LEVELS <- c("Small village or hamlet", "Village", "Town",
                  "City or large town: suburb", "City or large town: centre",
                  "Conurbation: suburb", "Conurbation: centre")
+# One colour per type, in TYPE_LEVELS order, used by the chapters and the
+# map. Each settlement's suburb is a lighter shade of its centre's colour:
+# greens for the countryside (pale for the smallest places), amber for towns,
+# reds for cities (light for suburbs), purples for conurbations (Mark).
+TYPE_COLOURS <- c("#8fcb8a", "#3f9a33", "#eda100", "#e0938b", "#c0392b",
+                  "#a99be8", "#6250d6")
 TYPE_LEVELS_A <- c("Village", "Village in a built-up region",
                    "Town", "Town in a built-up region",
                    "City or large town", "City or large town in a conurbation",

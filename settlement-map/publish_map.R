@@ -8,9 +8,11 @@
 # tower data is embedded as JSON (data, never code), so it also opens straight
 # from disk. Leaflet and the OpenStreetMap tiles load from the web.
 #
-# The classification lives in analysis/_common.R, so this script sources it.
-# That keeps one definition of the types: the map always shows what the
-# chapters show. Re-run after changing _common.R or re-running script B03.
+# The types come from the saved classification,
+# data/curated/tower_classes_<snapshot>.parquet, written by
+# scripts/B05_build_tower_classes.R. So the map shows exactly what the sample
+# draw will use. Re-run B05, then this script, after changing the thresholds
+# in config/choices.R or re-running B03 or B04.
 #
 # Contents: frame towers, plus unringable rings shown faded (Mark,
 # 2026-10-11), so volunteers can see every tower with bells when judging
@@ -21,55 +23,39 @@
 # exported.
 
 source(here::here("scripts", "00_setup.R"))
-source(here::here("analysis", "_common.R"))   # frame_towers, Draft C, known
+
+cur <- \(stem) here::here("data", "curated", paste0(stem, "_", FRAME_SNAPSHOT, ".parquet"))
+classes   <- arrow::read_parquet(cur("tower_classes"))
+locations <- arrow::read_parquet(cur("tower_locations"))
+context   <- arrow::read_parquet(cur("tower_context"))
+retail    <- arrow::read_parquet(cur("tower_retail"))
+known     <- readr::read_csv(here::here("data", "reference", "known_towers.csv"),
+                             col_types = readr::cols(.default = "c"))
 
 TEMPLATE <- here::here("settlement-map", "map_template.html")
 OUT_DIR  <- here::here("docs", "settlement-map")
 MAX_BYTES <- 1048576   # the pre-commit hook blocks files over 1 MiB
 
-# Colours: the chapters' palette, one per type, in TYPE_LEVELS order.
-type_colours <- unname(PAL_TYPE[TYPE_LEVELS])
+# The chapters' palette: one colour per type, in TYPE_LEVELS order.
+type_colours <- TYPE_COLOURS   # config/choices.R
 
-# Unringable rings: one per tower, skipping the few towers that also have a
-# ringable ring (they are on the map already). Measures come from the same
-# context table, and the same rule gives each its type. Frame towers within
-# 1 km: towers_r1km counts frame towers only, so an unringable ring is never
-# counted, by itself or by anyone else. An unringable ring is never a
-# settlement's fallback centre (eligible = FALSE).
-unringable <- frame |>
-  dplyr::filter(!.data$is_ringable, !.data$tower_id %in% towers$tower_id) |>
-  dplyr::summarise(bells = max(.data$bells), display = dplyr::first(.data$display),
-                   .by = "tower_id") |>
+# Frame towers, plus unringable rings shown faded (ringable = FALSE).
+shown <- classes |>
+  dplyr::filter(.data$in_frame | !.data$ringable) |>
+  dplyr::mutate(type = factor(.data$type, levels = TYPE_LEVELS),
+                ur   = as.integer(!.data$ringable)) |>
   dplyr::inner_join(locations, by = "tower_id") |>
-  dplyr::inner_join(context |> dplyr::select(-"in_frame"), by = "tower_id") |>
-  dplyr::left_join(retail, by = "tower_id") |>
-  dplyr::left_join(
-    special |> dplyr::distinct(.data$tower_id, .keep_all = TRUE) |>
-      dplyr::select("tower_id", special = "category"),
-    by = "tower_id"
-  ) |>
-  dplyr::mutate(
-    society = !is.na(.data$special) & .data$special %in% SOCIETY_CATEGORIES,
-    towers_1km = .data$towers_r1km,
-    centre_key = ifelse(is.na(.data$centre_pop), NA_character_,
-                        paste(round(.data$centre_pop), .data$centre_km2)),
-    nres_ratio = .data[[NRES_VAR]] / .data$centre_nres_share,
-    beyond_walk = (.data$pop_k2km - .data$pop_k250m) /
-      (.data$land_km2_k2km - .data$land_km2_k250m),
-    retail_near = retail_near(dplyr::pick(dplyr::starts_with("retail_d_t")), DRAFT_C),
-    type = classify_settlement_c(.data$centre_key, .data$centre_pop, .data[[LOCAL_VAR]],
-                                 .data$retail_near, .data$nres_ratio, .data$towers_1km, FALSE,
-                                 DRAFT_C, TYPE_LEVELS),
-    tower_cluster = tower_cluster(.data$towers_1km, .data$society, DRAFT_C)
-  )
-n_unringable_no_context <- sum(!frame$is_ringable) - nrow(unringable) -
-  sum(!frame$is_ringable & frame$tower_id %in% towers$tower_id)
-message(nrow(unringable), " unringable rings mapped; ", n_unringable_no_context,
-        " have no context row and are left off.")
-shown <- dplyr::bind_rows(
-  frame_towers |> dplyr::mutate(ur = 0L),
-  unringable   |> dplyr::mutate(ur = 1L)
-)
+  dplyr::left_join(context |> dplyr::select("tower_id", "pop_r1km", "urban_pop",
+                                            "pop_k2km", "pop_k250m", "land_km2_k2km",
+                                            "land_km2_k250m", dplyr::all_of(c(NRES_VAR, REGION_VAR))),
+                   by = "tower_id") |>
+  dplyr::left_join(retail |> dplyr::select("tower_id", "retail_nearest_name",
+                                           "retail_nearest_class", "retail_nearest_m",
+                                           "retail_d_t4_m"),
+                   by = "tower_id") |>
+  dplyr::mutate(beyond_walk = beyond_walk(.data$pop_k2km, .data$pop_k250m,
+                                          .data$land_km2_k2km, .data$land_km2_k250m))
+message(sum(shown$ur == 1L), " unringable rings mapped.")
 
 # Urban centres go in a lookup table, so each tower carries a small index
 # rather than repeating its centre's figures (the page must stay under 1 MiB).
@@ -94,7 +80,7 @@ rows <- shown |>
     label = .data$display,
     bells = .data$bells,
     type  = as.integer(.data$type) - 1L,            # 0-based for JavaScript
-    density = signif(.data[[LOCAL_VAR]], 3),         # 250 m kernel
+    density = signif(.data$local_density, 3),        # 250 m kernel
     beyond = signif(.data$beyond_walk, 2),           # density beyond a short walk
     shop  = .data$shop,                              # nearest retail centre (index)
     shop_m = .data$retail_nearest_m,                 # ... metres to it

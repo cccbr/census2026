@@ -6,7 +6,7 @@
 # CONTRACT: as for everything in R/, these functions take explicit inputs and
 # return values. They do not read or write files. The choices they need
 # (thresholds, which measure) are passed in by the caller, so the provisional
-# values live in one visible place: analysis/_common.R.
+# values live in one visible place: config/choices.R.
 
 #' One-sided ("stochastic frontier") model of log density given ring class
 #'

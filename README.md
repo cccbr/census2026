@@ -45,7 +45,9 @@ silently picks "the latest".
 A01 fetch Dove -> A02 profile -> A03 frame --+--> B01 locations --+--> B02 fetch geography -> B03 context --+
                                              |                    +--> B04 retail context -----------------+
                                              |                                                             v
-                                             |                                          analysis/, settlement-map/
+                                             |                                              B05 tower classes
+                                             |                                                             v
+                                             |                                     settlement-map/, the sample draw
                                              +--> C01 G&B register
                                              +--> questionnaire/publish_tower_list.R
 ```
@@ -63,8 +65,19 @@ A01 fetch Dove -> A02 profile -> A03 frame --+--> B01 locations --+--> B02 fetch
 | `B02_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
 | `B03_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
 | `B04_build_retail_context.R` | Distance from each UK tower to the nearest high street of each size, from the CDRC Retail Centre Boundaries (downloaded by hand after registration into `data/raw/cdrc_retail/<date>/`). Needs B01 only | `data/curated/tower_retail_<snapshot>.parquet` | seconds |
+| `B05_build_tower_classes.R` | Classifies every tower by settlement type (Draft C, D-037) with the thresholds in `config/choices.R`, and saves it. The map and the sample draw read this file; the chapters check against it | `data/curated/tower_classes_<snapshot>.parquet`, with the thresholds in its `.json` sidecar | seconds |
 | **Stage C** | **Association registers** | | |
 | `C01_import_gb_register.R` | Imports the Gloucester & Bristol Association's 2025 tower register and proposes a name-to-Dove crosswalk. The counts stay out of the repo (Q-025); see `data/reference/gb_register.md` | `data/curated/gb_register_<snapshot>.parquet`, `data/reference/gb_register_crosswalk.csv` | seconds |
+
+## Where the choices live
+
+`config/snapshots.R` names every data snapshot the project reads, once.
+`config/choices.R` holds the provisional methodological choices: which
+measures are used, the classification thresholds, the type names and
+colours, and the 1988 crosswalk. `scripts/00_setup.R` sources both, so every
+script and chapter sees the same values. Change a value there, never by
+redefining it in a script, and cite the D- or Q- entry it rests on in the
+same commit.
 
 ## What gets published, and from where
 
@@ -76,7 +89,7 @@ its source or its input data changes.
 | --- | --- | --- |
 | `questionnaire/publish_tower_list.R` | The tower list the questionnaire's search box fetches, to `docs/` (served by GitHub Pages) | A03, when the frame changes |
 | `questionnaire/build_widgets.R` | The two QuestionPro widgets with comments stripped, so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | Any change to `questionnaire/src/` |
-| `settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B03 or B04, or a change to the classification |
+| `settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B05 |
 
 The questionnaire's own notes are in `questionnaire/README.md` and
 `questionnaire/todo.md`.

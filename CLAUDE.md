@@ -95,6 +95,9 @@ moving on to a new one.
 ## Architecture
 
 ```
+config/       The named snapshots (snapshots.R) and the provisional choices
+              (choices.R). Sourced by scripts/00_setup.R. Every threshold
+              and snapshot name lives here, once.
 R/            Functions ONLY. Pure. Nothing runs on source().
               If a function here reads a path or writes to disk, it is in the
               wrong place — that belongs in scripts/.
