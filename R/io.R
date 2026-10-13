@@ -116,7 +116,7 @@ read_fetch_log <- function() {
 #' @param x           Data frame to write.
 #' @param path        Destination (.parquet).
 #' @param snapshot_id Snapshot id(s) this artefact derives from.
-#' @param script      Script that produced it, e.g. "scripts/04_build_frame.R".
+#' @param script      Script that produced it, e.g. "scripts/A03_build_frame.R".
 write_artefact <- function(x, path, snapshot_id, script) {
   fs::dir_create(fs::path_dir(path))
   arrow::write_parquet(x, path)

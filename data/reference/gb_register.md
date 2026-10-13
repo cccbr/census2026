@@ -56,7 +56,7 @@ So:
 | Tidy table with ringer counts | `data/curated/gb_register_gb_register_2025_2026-10-11.parquet` | No (gitignored) |
 | Register names matched to Dove towers | `data/reference/gb_register_crosswalk.csv` | Yes: tower names and Dove ids only, no counts |
 
-Built by `scripts/11_import_gb_register.R`. Publishing any counts, even in
+Built by `scripts/C01_import_gb_register.R`. Publishing any counts, even in
 aggregate, waits on the Association's agreement (decision register Q-025).
 
 ## The crosswalk
@@ -75,7 +75,7 @@ disposes. Each row has a `match_method`:
 `bells_differ` flags rows where the register and Dove disagree on bells,
 usually because of extra semitone bells. To review: check each row, correct
 `tower_id`, `ring_id` and `dove_label` where needed, and put your initials in
-`reviewed`. Notes go in `notes`. Script 11 never overwrites a crosswalk that
+`reviewed`. Notes go in `notes`. Script C01 never overwrites a crosswalk that
 exists.
 
 "Bristol Central" is a band, not a tower: the central Bristol cluster band.

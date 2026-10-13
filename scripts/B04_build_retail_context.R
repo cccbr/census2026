@@ -1,4 +1,4 @@
-# 12_build_retail_context.R ---------------------------------------------------
+# B04_build_retail_context.R ---------------------------------------------------
 #
 # How far each tower is from a shopping centre, and of what kind (D-037).
 #
@@ -106,5 +106,5 @@ message(sum(retail$retail_covered), " towers covered; ",
 
 out <- here::here("data", "curated", paste0("tower_retail_", FRAME_SNAPSHOT, ".parquet"))
 write_artefact(retail, path = out, snapshot_id = c(FRAME_SNAPSHOT, CDRC_SNAPSHOT),
-               script = "scripts/12_build_retail_context.R")
+               script = "scripts/B04_build_retail_context.R")
 message("Wrote ", out)

@@ -2,7 +2,7 @@
 
 Covers both widgets: the single picker (`tower_autocomplete.js`) and the multi
 picker (`tower_multipicker.js`). Unless a step says otherwise, it applies to
-both. **Paste the builds from `scripts/09_build_widget_paste.R`, never the
+both. **Paste the builds from `questionnaire/build_widgets.R`, never the
 source files**: QuestionPro refuses JavaScript Logic above a limit between
 19,012 and 20,841 characters.
 
@@ -34,7 +34,7 @@ anything about behaviour.
   with choosing done in a full-screen panel. Three earlier layouts failed on
   the phone; why is in `tower-autocomplete.md`, platform item 12.
 - **Script size limit found**: between 19,012 and 20,841 characters. Paste
-  builds now come from `scripts/09_build_widget_paste.R`.
+  builds now come from `questionnaire/build_widgets.R`.
 - **One picker per block.** QuestionPro runs every question's Pre JS when a
   block loads, so two pickers in one block race for inputs.
 
@@ -145,13 +145,13 @@ separated by ` | `, in the same order as the visible value.
 
 ## Step 9 — production hardening
 
-- Set `FREEZE_PUBLISHED_LISTS <- TRUE` in `scripts/05` so a live list can
+- Set `FREEZE_PUBLISHED_LISTS <- TRUE` in `questionnaire/publish_tower_list.R` so a live list can
   never change under respondents.
 - Retire the test copy on the personal `Ainsworld` account.
 - `CFG.debug = false`.
 - Confirm the Dove CC BY-SA attribution is live in the survey text (Q-001).
 - Regenerate from the final frame snapshot; record the build manifest.
-- Confirm the deployed script matches `inst/questionnaire/` in the repository.
+- Confirm the deployed script matches `questionnaire/` in the repository.
 - **Test the degraded path deliberately**: point `CFG.dataUrl` at a 404 and
   confirm a usable text box with instructions, not a dead question. This is the
   path a respondent on a bad connection will actually hit.
@@ -172,9 +172,9 @@ divergence.
 
 Both the widget and the data file have been silently truncated in transit
 during development. Before fieldwork, diff each deployed script against a
-fresh build from `scripts/09_build_widget_paste.R` (not against the
+fresh build from `questionnaire/build_widgets.R` (not against the
 commented source), and confirm the hosted file's header counts match what
-`scripts/05` generated.
+`questionnaire/publish_tower_list.R` generated.
 
 ## Watch: slow list fetch
 

@@ -69,7 +69,7 @@ DRAFT_A <- list(town_density = 300, town_pop = 5000,
 #     central if it is within 250 m (about three minutes' walk: on or by the
 #     high street) of a retail centre of tier 4 or larger: a district centre,
 #     town centre or market town, major town centre or regional centre
-#     (scripts/12_build_retail_context.R). District centres count because the
+#     (scripts/B04_build_retail_context.R). District centres count because the
 #     classification ranks centres against bigger neighbours: Warwick and
 #     Dudley are district centres.
 #   centre_nres_ratio: where retail centres are not mapped (abroad), a tower
@@ -141,13 +141,13 @@ special   <- readr::read_csv(
   here::here("data", "reference", "special_towers_draft.csv"),
   col_types = readr::cols(.default = "c")
 )
-retail    <- arrow::read_parquet(cur("tower_retail"))   # scripts/12 (D-037)
+retail    <- arrow::read_parquet(cur("tower_retail"))   # scripts/B04 (D-037)
 known     <- readr::read_csv(
   here::here("data", "reference", "known_towers.csv"),
   col_types = readr::cols(.default = "c")
 )
 
-# The new measures from script 08 (2026-10-10). Stop early, with a clear
+# The new measures from script B03 (2026-10-10). Stop early, with a clear
 # message, if the context table predates them.
 needed_cols <- c("density_land_k250m", "density_land_k500m", "density_land_r500m",
                  "centre_pop", "urban_pop", "rural_cluster_pop", "centre_dist_km",
@@ -155,7 +155,7 @@ needed_cols <- c("density_land_k250m", "density_land_k500m", "density_land_r500m
 missing_cols <- setdiff(needed_cols, names(context))
 if (length(missing_cols) > 0) {
   stop("The tower context table is missing ", paste(missing_cols, collapse = ", "),
-       ". Re-run scripts/08_build_tower_context.R.", call. = FALSE)
+       ". Re-run scripts/B03_build_tower_context.R.", call. = FALSE)
 }
 
 # One row per tower with a ringable full-circle ring of 3 or more bells, in

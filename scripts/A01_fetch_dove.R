@@ -1,4 +1,4 @@
-# 01_fetch_dove.R -------------------------------------------------------------
+# A01_fetch_dove.R -------------------------------------------------------------
 #
 # Fetch an immutable, checksummed snapshot of Dove's Guide.
 #
@@ -100,7 +100,7 @@ print(manifest |> dplyr::select(file, n_rows, bytes, sha256))
 
 message(
   "\nSnapshot ", snapshot_id, " written to:\n  ", dest,
-  "\n\nNEXT: commit provenance/fetch_log.csv, then run scripts/02_profile_dove.R"
+  "\n\nNEXT: commit provenance/fetch_log.csv, then run scripts/A02_profile_dove.R"
 )
 
 # -----------------------------------------------------------------------------

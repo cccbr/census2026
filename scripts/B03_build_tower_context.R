@@ -1,4 +1,4 @@
-# 08_build_tower_context.R ----------------------------------------------------
+# B03_build_tower_context.R ----------------------------------------------------
 #
 # Enrich tower locations with settlement context. One row per tower, keyed on
 # tower_id. Join to the frame on tower_id; the frame key stays RingID (D-007).
@@ -242,7 +242,7 @@ ghsl_tile_extent <- function(f) {
 #' A tile must sit INSIDE its grid square and on the 100 m lattice. It need not
 #' fill it: GHS-LAND R2022A tiles are trimmed where the square is mostly sea
 #' (R13_C29 starts 400 km in), while GHS-POP R2023A tiles fill the square. A
-#' tile outside its square would mean script 07 chose tiles wrongly, and stops
+#' tile outside its square would mean script B02 chose tiles wrongly, and stops
 #' the script.
 #'
 #' Before aggregating to 1 km, each tile is extended to its full square, so
@@ -399,7 +399,7 @@ SETTLEMENT_LAYERS <- tibble::tribble(
 # Margin around each block of towers when tracing. 75 km comfortably holds
 # any British urban centre except London, whose population may then be a lower
 # bound for towers near its edge (flagged in settlement_window_edge). It also
-# stays inside the population tiles script 07 downloaded, which reach about
+# stays inside the population tiles script B02 downloaded, which reach about
 # 77 km beyond the towers for the 8 km kernel.
 SETTLEMENT_WINDOW_M <- 75000
 
@@ -475,7 +475,7 @@ ruc_hits <- sf::st_as_sf(towers, coords = c("lon", "lat"), crs = 4326) |>
   sf::st_drop_geometry()
 
 # Generalised (BGC) boundaries can overlap slightly, so a tower on a shared
-# edge can fall in two OAs. Found on the real data: script 08 first stopped
+# edge can fall in two OAs. Found on the real data: script B03 first stopped
 # here. Where the candidate OAs agree on the RUC class, the class is kept.
 # Where they disagree, the class is set to NA and flagged. Picking one would
 # be a tie-break nobody chose.
@@ -725,7 +725,7 @@ write_artefact(
     GHSL_BUILT_SNAPSHOT,
     GHSL_NRES_SNAPSHOT
   ),
-  script = "scripts/08_build_tower_context.R"
+  script = "scripts/B03_build_tower_context.R"
 )
 
 message("Wrote ", out)

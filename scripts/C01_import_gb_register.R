@@ -1,4 +1,4 @@
-# 11_import_gb_register.R -----------------------------------------------------
+# C01_import_gb_register.R -----------------------------------------------------
 #
 # Import the Gloucester & Bristol Diocesan Association's tower register: for
 # each tower in the Association, its branch, its bells and the number of
@@ -212,5 +212,5 @@ stopifnot("crosswalk does not line up with the register" =
             nrow(register_tidy) == nrow(register))
 write_artefact(register_tidy, path = out,
                snapshot_id = c(RECEIVED$snapshot_id, FRAME_SNAPSHOT),
-               script = "scripts/11_import_gb_register.R")
+               script = "scripts/C01_import_gb_register.R")
 message("Wrote ", out)

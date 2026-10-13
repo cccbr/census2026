@@ -3,8 +3,8 @@
 //
 // DO NOT PASTE THIS FILE. QuestionPro rejects JavaScript Logic over about
 // 19-20k characters, and this commented source is larger. Paste the build
-// from scripts/09_build_widget_paste.R: inst/questionnaire/build/
-// tower_multipicker.paste.js. Full notes: inst/questionnaire/tower-autocomplete.md
+// from questionnaire/build_widgets.R: questionnaire/build/
+// tower_multipicker.paste.js. Full notes: questionnaire/README.md
 //
 // Lets a respondent choose SEVERAL towers. For questions such as "Which towers
 // would count you as a band member?" and "Where did you ring this week?".

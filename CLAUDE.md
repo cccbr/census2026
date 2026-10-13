@@ -98,11 +98,18 @@ moving on to a new one.
 R/            Functions ONLY. Pure. Nothing runs on source().
               If a function here reads a path or writes to disk, it is in the
               wrong place — that belongs in scripts/.
-scripts/      Numbered, run top-to-bottom, interactive-friendly. All side
-              effects live here. These are a narrative, not a library.
+scripts/      The data pipeline, interactive-friendly. All side effects
+              live here. These are a narrative, not a library. Named by
+              stage and order: A = Dove and the frame, B = settlement
+              context, C = association registers. A new step takes the next
+              free number in its stage; nothing is renumbered.
+questionnaire/  The survey instrument: widget sources (src/), notes, and
+              the scripts that publish the tower list and build the paste
+              versions of the widgets.
+settlement-map/ The volunteers' map: template and publishing script.
 analysis/     Quarto sub-project — the analytical narrative.
 reports/      Quarto sub-project — parameterised, one render per association.
-inst/         Generated assets (the questionnaire tower array).
+docs/         What GitHub Pages serves. Generated, committed, never edited.
 data/         Only data/reference/ is committed. See README.md.
 provenance/   Committed audit trail. Metadata only, never data.
 ```
@@ -146,7 +153,7 @@ was found, or what to do. Context comes after.
 conclusion, a longer one for the reasoning behind it. Prefer plain words:
 "use" not "utilise", "find" not "ascertain".
 
-**Name the actor before the action.** "Script 08 drops these towers", not
+**Name the actor before the action.** "Script B03 drops these towers", not
 "these towers are dropped".
 
 **Be concrete.** Numbers, names, commands and failure conditions, not
@@ -437,9 +444,9 @@ Pushed to `cccbr/census2026`; the pre-commit hook is installed. The frame
 Settlement context is in progress, toward choosing how to stratify the chased
 sample (Q-023, needed before the draw):
 
-- Script 06 builds tower locations. Script 07 fetches GHSL population, GHSL
+- Script B01 builds tower locations. Script B02 fetches GHSL population, GHSL
   Degree of Urbanisation, GHSL land and ONS RUC 2021 (all snapshots dated
-  2026-10-10). Script 08 builds `tower_context_dove_2026-09-19.parquet`,
+  2026-10-10). Script B03 builds `tower_context_dove_2026-09-19.parquet`,
   now with 250 m and 500 m measures and contiguous-settlement measures
   (D-027). Mark re-runs 08 on his machine.
 - The analysis book has four settlement chapters sharing
@@ -460,11 +467,11 @@ sample (Q-023, needed before the draw):
   grade places: people will look up their own town (Mark's father's
   warning). Draft B is kept in the chapter only as the account of where it
   ran aground.
-- Script 12 builds `tower_retail_dove_2026-09-19.parquet` from the CDRC
+- Script B04 builds `tower_retail_dove_2026-09-19.parquet` from the CDRC
   Retail Centre Boundaries (snapshot `cdrc_retail_2026-10-11`, Open
   Government Licence; attribution in the map footer). `_common.R` needs it.
 - The Gloucester & Bristol Association's 2025 tower register (ringers per
-  tower, from its treasurer) is imported by `scripts/11_import_gb_register.R`.
+  tower, from its treasurer) is imported by `scripts/C01_import_gb_register.R`.
   Its counts are third-party data and stay in `data/raw` and `data/curated`,
   never in the public repo (Q-025); only the name-to-Dove crosswalk is
   committed. See `data/reference/gb_register.md`.
@@ -474,13 +481,13 @@ sample (Q-023, needed before the draw):
 
 Still outstanding:
 
-- `scripts/03` (society crosswalk) is not written; it waits on Q-006.
-- The QuestionPro widgets live in `inst/questionnaire/`: the single picker
+- `scripts/A04` (society crosswalk) is not written; it waits on Q-006.
+- The QuestionPro widgets live in `questionnaire/`: the single picker
   `tower_autocomplete.js` and the multi picker `tower_multipicker.js`
   (D-030). **Never hand Mark a source file to paste.** QuestionPro refuses
   JavaScript Logic above a limit between 19,012 and 20,841 characters, so
-  `scripts/09_build_widget_paste.R` strips comments into
-  `inst/questionnaire/build/*.paste.js` (gitignored). `foldKey()` now has
+  `questionnaire/build_widgets.R` strips comments into
+  `questionnaire/build/*.paste.js` (gitignored). `foldKey()` now has
   three copies (both widgets and `R/text.R`) that must change together.
   Platform behaviour learned the hard way is in `tower-autocomplete.md`;
   read it before changing either widget.

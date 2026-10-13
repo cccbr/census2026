@@ -143,7 +143,7 @@ mean something. Nothing here is a decision.
 
 ## What the measures are
 
-Script 08 describes the area around each tower in three ways.
+Script B03 describes the area around each tower in three ways.
 
 - **Decay kernels**, named `k250m` to `k8km`. Nearer things count more, and
   the weight halves every 250 m, 500 m, 1, 2, 4 or 8 km. The 2 km kernel is
@@ -162,7 +162,7 @@ Script 08 describes the area around each tower in three ways.
   Layer, with the same figures for the tower's whole urban centre. Named
   `built_km2_<m>`, `nres_km2_<m>` and `nres_share_<m>`, the non-residential
   share. It measures ground covered, not floor space.
-- **Retail centres** (added 11 October, D-037, script 12). The distance from
+- **Retail centres** (added 11 October, D-037, script B04). The distance from
   each UK tower to the nearest mapped retail centre of each size, from the
   Consumer Data Research Centre's Retail Centre Boundaries (Open Government
   Licence): `retail_d_t3_m` to `retail_d_t6_m`, metres to the nearest Town
@@ -257,7 +257,7 @@ tw |>
 ```
 
 `r n_missing_context` frame rings have no context row. This should be zero.
-If it is not, script 08's scope or the coordinates need checking.
+If it is not, script B03's scope or the coordinates need checking.
 
 ## How each measure is distributed
 
@@ -467,7 +467,7 @@ ringed by green belt and a stretch of continuous suburb can therefore score
 alike. What tells them apart is whether the built-up area is continuous.
 
 **How they are traced.** The international Degree of Urbanisation already
-labels every 1 km cell. Script 08 joins the labelled cells back into
+labels every 1 km cell. Script B03 joins the labelled cells back into
 continuous patches, using the scheme's own rules, and sums each patch's
 population.^[Eurostat (2021), *Applying the Degree of Urbanisation*. See
 *Methods and sources*.]
@@ -615,7 +615,7 @@ if (has_gb) {
 }
 ```
 
-`r if (!has_gb) "**The register is not on this machine**, so this section is skipped. Run scripts/11_import_gb_register.R with the spreadsheet in data/raw/gb_register/ to include it." else ""`
+`r if (!has_gb) "**The register is not on this machine**, so this section is skipped. Run scripts/C01_import_gb_register.R with the spreadsheet in data/raw/gb_register/ to include it." else ""`
 
 ```{r}
 #| label: tbl-gb-scale
@@ -818,7 +818,7 @@ the United Kingdom* (working paper, with the data). Retail Centre
 Boundaries (UK), Geographic Data Service / Consumer Data Research Centre,
 https://data.geods.ac.uk/dataset/retail-centre-boundaries, Open Government
 Licence. Distances computed in British National Grid by
-`scripts/12_build_retail_context.R`.
+`scripts/B04_build_retail_context.R`.
 
 **Band test.** Gloucester & Bristol Diocesan Association, tower register
 2025, shared by its treasurer, Richard Heys, on 11 October 2026; held

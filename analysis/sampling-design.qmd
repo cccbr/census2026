@@ -202,7 +202,7 @@ bells x rurality", and its variance estimation is standard.
 
 **Still open.**
 
-1. *Re-run this simulation on the full context data* (script 08 as run on
+1. *Re-run this simulation on the full context data* (script B03 as run on
    Mark's machine), with the settled lines.
 2. *The exact merging of small cells*, to fix before the draw.
 3. *Whether to over-sample the small villages and hamlets.* If they hold

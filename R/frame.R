@@ -21,7 +21,7 @@ BRITISH_ISLES <- c(
 
 #' Add frame membership flags to a staged Dove table
 #'
-#' Expects the snake_case column names produced by `scripts/04_build_frame.R`,
+#' Expects the snake_case column names produced by `scripts/A03_build_frame.R`,
 #' not Dove's own PascalCase. Renaming happens once, in the script.
 #'
 #' @param dove Tibble with at least `ur`, `ring_type`, `country`, `bells`.

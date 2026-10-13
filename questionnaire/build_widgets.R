@@ -1,9 +1,9 @@
-# 09_build_widget_paste.R -----------------------------------------------------
+# questionnaire/build_widgets.R ---------------------------------------------
 #
 # Build the paste versions of the two QuestionPro widgets.
 #
-#   inst/questionnaire/tower_autocomplete.js  ->  build/tower_autocomplete.paste.js
-#   inst/questionnaire/tower_multipicker.js   ->  build/tower_multipicker.paste.js
+#   questionnaire/src/tower_autocomplete.js  ->  build/tower_autocomplete.paste.js
+#   questionnaire/src/tower_multipicker.js   ->  build/tower_multipicker.paste.js
 #
 # QuestionPro rejects JavaScript Logic above a limit somewhere between 19,012
 # characters (accepted) and 20,841 (rejected), found by test on 2026-10-10.
@@ -24,8 +24,8 @@ source(here::here("scripts", "00_setup.R"))
 # refused here rather than discovered in the QuestionPro editor.
 PASTE_LIMIT <- 19012
 
-src_dir   <- here::here("inst", "questionnaire")
-build_dir <- fs::path(src_dir, "build")
+src_dir   <- here::here("questionnaire", "src")
+build_dir <- here::here("questionnaire", "build")
 fs::dir_create(build_dir)
 
 widgets <- c("tower_autocomplete", "tower_multipicker")
@@ -42,8 +42,8 @@ for (w in widgets) {
   keep <- !stringr::str_detect(code, "^\\s*//") & stringr::str_detect(code, "\\S")
   body <- stringr::str_remove(code[keep], "\\s+$")
 
-  header <- paste0("// ", w, " ", version, " - PASTE BUILD of inst/questionnaire/",
-                   w, ".js. Do not edit; rebuild with scripts/09.")
+  header <- paste0("// ", w, " ", version, " - PASTE BUILD of questionnaire/src/",
+                   w, ".js. Do not edit; rebuild with questionnaire/build_widgets.R.")
   paste_lines <- c(header, body)
 
   # LF endings, so the character count is the same on Windows as in QuestionPro.

@@ -33,31 +33,79 @@ on the same day stops rather than overwriting.
 
 ---
 
-## The pipeline, script by script
+## The pipeline, stage by stage
 
-Scripts live in `scripts/` and are numbered in the order they run. Each one
-names the data snapshot it uses at the top. None of them silently picks "the
-latest".
+Pipeline scripts live in `scripts/` and run in name order. The letter is the
+stage and the number is the order within it, so a new step takes the next
+free number in its stage and nothing is ever renumbered. Every script sources
+`00_setup.R` first, and each names the data snapshot it uses. None of them
+silently picks "the latest".
+
+```
+A01 fetch Dove -> A02 profile -> A03 frame --+--> B01 locations --+--> B02 fetch geography -> B03 context --+
+                                             |                    +--> B04 retail context -----------------+
+                                             |                                                             v
+                                             |                                          analysis/, settlement-map/
+                                             +--> C01 G&B register
+                                             +--> questionnaire/publish_tower_list.R
+```
 
 | Script | What it does | Writes | Time |
 | --- | --- | --- | --- |
 | `00_setup.R` | Loads packages and the functions in `R/`. Every script starts by sourcing it | — | seconds |
-| `01_fetch_dove.R` | Downloads Dove's Guide, the tower database | `data/raw/dove/<date>/`, a row in the fetch log | 1 min |
-| `02_profile_dove.R` | Records the columns Dove actually had, so a change in Dove shows up in a diff | `provenance/dove_schema_<snapshot>.md` | seconds |
-| `03` | Society crosswalk. **Not yet written** | — | — |
-| `04_build_frame.R` | Builds the frame: one row per ring of bells, with flags for each frame definition | `data/curated/frame_<snapshot>.parquet` | seconds |
-| `05_export_questionnaire_towers.R` | Publishes the tower list the questionnaire's search box fetches | `docs/` (served by GitHub Pages) | seconds |
-| `06_build_tower_locations.R` | One row per tower with its coordinates | `data/curated/tower_locations_<snapshot>.parquet` | seconds |
-| `07_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
-| `08_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
-| `09_build_widget_paste.R` | Strips comments from the two QuestionPro widgets so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | `inst/questionnaire/build/*.paste.js` | seconds |
-| `10_export_settlement_map.R` | Publishes an interactive map of the draft settlement types, for volunteers to check | `docs/settlement-map/index.html` (served by GitHub Pages) | seconds |
-| `11_import_gb_register.R` | Imports the Gloucester & Bristol Association's 2025 tower register and proposes a name-to-Dove crosswalk. The counts stay out of the repo (Q-025); see `data/reference/gb_register.md` | `data/curated/gb_register_<snapshot>.parquet`, `data/reference/gb_register_crosswalk.csv` | seconds |
-| `12_build_retail_context.R` | Distance from each UK tower to the nearest high street of each size, from the CDRC Retail Centre Boundaries (downloaded by hand after registration into `data/raw/cdrc_retail/<date>/`). Run after 08 and before rendering or script 10 | `data/curated/tower_retail_<snapshot>.parquet` | seconds |
+| **Stage A** | **Dove and the frame** | | |
+| `A01_fetch_dove.R` | Downloads Dove's Guide, the tower database | `data/raw/dove/<date>/`, a row in the fetch log | 1 min |
+| `A02_profile_dove.R` | Records the columns Dove actually had, so a change in Dove shows up in a diff | `provenance/dove_schema_<snapshot>.md` | seconds |
+| `A03_build_frame.R` | Builds the frame: one row per ring of bells, with flags for each frame definition | `data/curated/frame_<snapshot>.parquet` | seconds |
+| `A04` | Society crosswalk. **Not yet written**; waits on Q-006 | — | — |
+| **Stage B** | **Settlement context** | | |
+| `B01_build_tower_locations.R` | One row per tower with its coordinates | `data/curated/tower_locations_<snapshot>.parquet` | seconds |
+| `B02_fetch_geography.R` | Downloads population, land and urban–rural data. Set `SOURCES_TO_FETCH` at the top to choose which | `data/raw/<source>/<date>/` | 5–15 min |
+| `B03_build_tower_context.R` | Measures each tower's surroundings: people, other towers and bells nearby, land and sea, the continuous settlement it stands in, urban–rural class | `data/curated/tower_context_<snapshot>.parquet` | 25–35 min |
+| `B04_build_retail_context.R` | Distance from each UK tower to the nearest high street of each size, from the CDRC Retail Centre Boundaries (downloaded by hand after registration into `data/raw/cdrc_retail/<date>/`). Needs B01 only | `data/curated/tower_retail_<snapshot>.parquet` | seconds |
+| **Stage C** | **Association registers** | | |
+| `C01_import_gb_register.R` | Imports the Gloucester & Bristol Association's 2025 tower register and proposes a name-to-Dove crosswalk. The counts stay out of the repo (Q-025); see `data/reference/gb_register.md` | `data/curated/gb_register_<snapshot>.parquet`, `data/reference/gb_register_crosswalk.csv` | seconds |
+
+## What gets published, and from where
+
+Each published deliverable has its own folder, holding its source and the
+script that publishes it. These scripts are not pipeline steps: run one when
+its source or its input data changes.
+
+| Script | Publishes | Run after |
+| --- | --- | --- |
+| `questionnaire/publish_tower_list.R` | The tower list the questionnaire's search box fetches, to `docs/` (served by GitHub Pages) | A03, when the frame changes |
+| `questionnaire/build_widgets.R` | The two QuestionPro widgets with comments stripped, so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | Any change to `questionnaire/src/` |
+| `settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B03 or B04, or a change to the classification |
+
+The questionnaire's own notes are in `questionnaire/README.md` and
+`questionnaire/todo.md`.
+
+### Old script names
+
+Scripts were renamed on 13 October 2026. Decision entries written before then
+use the old names, and `decisions.md` is never edited, so this table maps them.
+
+| Old | New |
+| --- | --- |
+| `01_fetch_dove.R` | `scripts/A01_fetch_dove.R` |
+| `02_profile_dove.R` | `scripts/A02_profile_dove.R` |
+| `03` (crosswalk, unwritten) | `scripts/A04` |
+| `04_build_frame.R` | `scripts/A03_build_frame.R` |
+| `05_export_questionnaire_towers.R` | `questionnaire/publish_tower_list.R` |
+| `06_build_tower_locations.R` | `scripts/B01_build_tower_locations.R` |
+| `07_fetch_geography.R` | `scripts/B02_fetch_geography.R` |
+| `08_build_tower_context.R` | `scripts/B03_build_tower_context.R` |
+| `09_build_widget_paste.R` | `questionnaire/build_widgets.R` |
+| `10_export_settlement_map.R` | `settlement-map/publish_map.R` |
+| `11_import_gb_register.R` | `scripts/C01_import_gb_register.R` |
+| `12_build_retail_context.R` | `scripts/B04_build_retail_context.R` |
+| `inst/questionnaire/` | `questionnaire/` (widget sources in `questionnaire/src/`) |
+| `inst/settlement_map/` | `settlement-map/` |
 
 ### What the settlement measures are
 
-Script 08 describes the area around each tower in three ways.
+Script B03 describes the area around each tower in three ways.
 
 - **A decay kernel** counts people, towers or bells, giving nearer ones more
   weight. The weight halves every 250 m, 500 m, 1, 2, 4 or 8 km depending on
@@ -94,9 +142,9 @@ a popup. It is for the analysis volunteers to pan around and challenge. Once
 pushed, GitHub Pages serves it at `<pages site>/settlement-map/`. It is one
 self-contained file, so it also opens straight from disk.
 
-Script 10 builds it from the same code as the analysis chapters
+`settlement-map/publish_map.R` builds it from the same code as the analysis chapters
 (`analysis/_common.R`), so the map always shows the current classification.
-Re-run script 10 after changing the classification or re-running script 08 or 12,
+Re-run `settlement-map/publish_map.R` after changing the classification or re-running script B03 or B04,
 then commit the page. It contains no personal data, and carries Dove's
 CC BY-SA attribution.
 
@@ -160,7 +208,7 @@ named snapshots.
 **The cache does not notice everything.** Quarto re-runs a chapter only when
 the chapter's own file changes. It does not notice a change to
 `analysis/_common.R`, to a function in `R/`, or to the data (for example
-after re-running script 08). After any of those, either:
+after re-running script B03). After any of those, either:
 
 - render the affected chapters one at a time, for example
   `quarto render analysis/settlement-classes.qmd`. Rendering a single file
@@ -232,8 +280,8 @@ Contributors using Claude will find more detailed working rules in
 | Positron started the wrong R version | Delete the console session (bin icon) and start a new one. Check `R.version.string` before installing anything |
 | Quarto said `knitr` or `rmarkdown` was missing | The folder's `.Rprofile` is missing; renv was not active |
 | Quarto could not find `scripts/00_setup.R` | The chapter lacks its `here::i_am()` line |
-| Script 08 stopped on a GHSL land tile's extent | Fixed. Land tiles are trimmed where mostly sea; the check now accepts that |
-| A chapter showed old numbers after script 08 was re-run | The freeze does not notice data changes. Render each chapter on its own, or delete `analysis/_freeze/` first |
+| Script B03 stopped on a GHSL land tile's extent | Fixed. Land tiles are trimmed where mostly sea; the check now accepts that |
+| A chapter showed old numbers after script B03 was re-run | The freeze does not notice data changes. Render each chapter on its own, or delete `analysis/_freeze/` first |
 
 After installing a package, run `renv::snapshot()`. Before committing, run
 `renv::status()`. A package used but never snapshotted works on your machine

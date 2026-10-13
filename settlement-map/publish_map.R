@@ -1,4 +1,4 @@
-# 10_export_settlement_map.R --------------------------------------------------
+# settlement-map/publish_map.R ----------------------------------------------
 #
 # Publish an interactive map of the draft settlement types, for the analysis
 # volunteers to pan around and check (Mark, 2026-10-11).
@@ -10,7 +10,7 @@
 #
 # The classification lives in analysis/_common.R, so this script sources it.
 # That keeps one definition of the types: the map always shows what the
-# chapters show. Re-run after changing _common.R or re-running script 08.
+# chapters show. Re-run after changing _common.R or re-running script B03.
 #
 # Contents: frame towers, plus unringable rings shown faded (Mark,
 # 2026-10-11), so volunteers can see every tower with bells when judging
@@ -23,7 +23,7 @@
 source(here::here("scripts", "00_setup.R"))
 source(here::here("analysis", "_common.R"))   # frame_towers, Draft C, known
 
-TEMPLATE <- here::here("inst", "settlement_map", "map_template.html")
+TEMPLATE <- here::here("settlement-map", "map_template.html")
 OUT_DIR  <- here::here("docs", "settlement-map")
 MAX_BYTES <- 1048576   # the pre-commit hook blocks files over 1 MiB
 

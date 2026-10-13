@@ -74,6 +74,6 @@ other people, or anything you would not want published.
 The Association's 2025 tower register (towers, branches, bells, ringers on
 the register) matched to Dove's `tower_id` and `ring_id`. Only tower names
 and Dove keys are here; the ringer counts stay out of this public
-repository. Built and explained by `scripts/11_import_gb_register.R` and
+repository. Built and explained by `scripts/C01_import_gb_register.R` and
 `gb_register.md`. Proposed matches have `reviewed` blank until a person has
 checked them.

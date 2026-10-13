@@ -2,7 +2,7 @@
 
 A hand-built list of towers whose band is unlikely to be explained by the
 people living around them. For these towers, catchment and density measures
-from `scripts/08` describe the wrong thing. Every row has `status = proposed`.
+from `scripts/B03` describe the wrong thing. Every row has `status = proposed`.
 None has been reviewed by a person who knows the tower.
 
 **What happens to these towers in the sample is Q-022 and is open.** The

@@ -1,4 +1,4 @@
-# 07_fetch_geography.R --------------------------------------------------------
+# B02_fetch_geography.R --------------------------------------------------------
 #
 # Fetch immutable, checksummed snapshots of the external geography used to
 # enrich tower locations:
@@ -23,7 +23,7 @@
 #
 # Each source lands in data/raw/<source>/<date>/ and gets one fetch_log row
 # per file, as Dove does. Zips are stored as fetched. Unzipping happens in
-# script 08, into data/interim/, so the raw bytes stay exactly as recorded.
+# script B03, into data/interim/, so the raw bytes stay exactly as recorded.
 #
 # Run interactively. It refuses to overwrite an existing snapshot.
 #
@@ -47,7 +47,7 @@ FRAME_SNAPSHOT <- "dove_2026-09-19"   # tiles are chosen from these towers
 GHSL_EPOCH <- "E2020"
 
 # The widest kernel decides how far beyond a tower population is needed: about
-# 77 km for an 8 km half-distance. Keep this in step with MEASURES in script 08
+# 77 km for an 8 km half-distance. Keep this in step with MEASURES in script B03
 # (D-026).
 MAX_HALF_DISTANCE_M <- 8000
 
@@ -104,7 +104,7 @@ ONS_OA_RUC_URL <- paste0(
 #
 # GHSL Mollweide tiles are 1000 km squares named R<row>_C<col>. The origin is
 # x = -18,041,000 m, y = 9,000,000 m. That grid is documented by a third-party
-# mirror, not by JRC. So script 08 checks every downloaded tile's actual extent
+# mirror, not by JRC. So script B03 checks every downloaded tile's actual extent
 # against it, and stops if they disagree.
 
 GHSL_X0   <- -18041000
@@ -310,5 +310,5 @@ message(
   "\nDone. Snapshot ids:\n  ",
   paste(unlist(fetched), collapse = "\n  "),
   "\n\nNEXT: commit provenance/fetch_log.csv, then set these ids at the top of",
-  " scripts/08_build_tower_context.R"
+  " scripts/B03_build_tower_context.R"
 )

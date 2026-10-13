@@ -57,6 +57,6 @@ Thumbs.db
 *.bak
 
 # Generated questionnaire payload ---------------------------------------------
-# 300KB+ of generated data, rebuilt by scripts/05_export_questionnaire_towers.R
+# 300KB+ of generated data, rebuilt by questionnaire/publish_tower_list.R
 # from the template and the curated frame. The template IS committed.
-inst/questionnaire/build/
+questionnaire/build/

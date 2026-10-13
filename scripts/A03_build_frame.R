@@ -1,4 +1,4 @@
-# 04_build_frame.R ------------------------------------------------------------
+# A03_build_frame.R ------------------------------------------------------------
 #
 # Build the curated ring frame from a named Dove snapshot.
 #
@@ -9,7 +9,7 @@
 # latest" — the frame must be a stated, frozen snapshot or the denominator
 # moves under the analysis.
 #
-# NOTE: script 03 (society crosswalk) is deliberately not written yet. It is
+# NOTE: script A04 (society crosswalk) is deliberately not written yet. It is
 # not needed for the questionnaire picklist and is blocked on Q-006.
 
 source(here::here("scripts", "00_setup.R"))
@@ -159,8 +159,9 @@ write_artefact(
   frame,
   path        = out,
   snapshot_id = SNAPSHOT_ID,
-  script      = "scripts/04_build_frame.R"
+  script      = "scripts/A03_build_frame.R"
 )
 
 message("\nWrote ", out)
-message("Next: scripts/05_export_questionnaire_towers.R")
+message("Next: scripts/B01_build_tower_locations.R. If the questionnaire's ",
+        "tower list must change too: questionnaire/publish_tower_list.R")

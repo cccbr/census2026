@@ -1,7 +1,7 @@
-# 06_build_tower_locations.R --------------------------------------------------
+# B01_build_tower_locations.R --------------------------------------------------
 #
 # Build a minimal location table, one row per Dove tower, from the curated
-# frame. Geographic enrichment (scripts/08) hangs off this table and joins back
+# frame. Geographic enrichment (scripts/B03) hangs off this table and joins back
 # to the frame on tower_id when needed.
 #
 # WHY TOWER, NOT RING
@@ -84,7 +84,7 @@ write_artefact(
   locations,
   path        = out,
   snapshot_id = SNAPSHOT_ID,
-  script      = "scripts/06_build_tower_locations.R"
+  script      = "scripts/B01_build_tower_locations.R"
 )
 
-message("Wrote ", out, "\nNext: scripts/07_fetch_geography.R")
+message("Wrote ", out, "\nNext: scripts/B02_fetch_geography.R")
