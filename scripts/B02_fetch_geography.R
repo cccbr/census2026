@@ -38,7 +38,7 @@ source(here::here("scripts", "00_setup.R"))
 
 library(httr2)
 
-FRAME_SNAPSHOT <- "dove_2026-09-19"   # tiles are chosen from these towers
+# Tiles are chosen from the towers of FRAME_SNAPSHOT (config/snapshots.R).
 
 # Q-021 OPEN: population epoch. GHSL's 2025 and 2030 epochs are projections,
 # described by JRC as "projections to 2025 and 2030 derived from CIESIN

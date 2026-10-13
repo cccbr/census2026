@@ -64,13 +64,8 @@ library(terra)
 
 # ---- snapshots: named, never discovered -------------------------------------
 
-FRAME_SNAPSHOT <- "dove_2026-09-19"
-GHSL_POP_SNAPSHOT <- "ghsl_pop_E2020_2026-10-10"
-GHSL_SMOD_SNAPSHOT <- "ghsl_smod_E2020_2026-10-10"
-ONS_RUC_SNAPSHOT <- "ons_oa_ruc_2026-10-10"
-GHSL_LAND_SNAPSHOT <- "ghsl_land_E2018_2026-10-10"
-GHSL_BUILT_SNAPSHOT <- "ghsl_built_E2020_2026-10-11"
-GHSL_NRES_SNAPSHOT <- "ghsl_nres_E2020_2026-10-11"
+# FRAME_SNAPSHOT and the GHSL_* / ONS_RUC_SNAPSHOT names are in
+# config/snapshots.R.
 
 # ---- OPEN decisions encoded here: do not let these harden silently ----------
 
@@ -129,10 +124,8 @@ BUILT_MEASURES <- dplyr::filter(
 # allocation, splitting each population cell among the towers that reach it.
 # The ratios below evaluate competition at the tower, not at the resident.
 
-# Q-020 OPEN: bells at a tower with two frame rings. On dove_2026-09-19 this
-# affects two towers only: Gresford (8 + 6) and Rugby (8 + 5). "max" counts the
-# larger ring. "sum" counts every bell.
-MULTI_RING_BELLS <- "max"
+# Q-020 OPEN: MULTI_RING_BELLS, bells at a tower with two frame rings, is set
+# in config/choices.R.
 
 # Truncation tolerance for the kernel windows. This is numerical, not
 # methodological: see kernel_cutoff_m().

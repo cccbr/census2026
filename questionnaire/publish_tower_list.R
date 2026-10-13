@@ -23,7 +23,7 @@
 
 source(here::here("scripts", "00_setup.R"))
 
-SNAPSHOT_ID <- "dove_2026-09-19"          # must match scripts/A03_build_frame.R
+SNAPSHOT_ID <- FRAME_SNAPSHOT             # config/snapshots.R
 
 # Once the questionnaire is live, a published list must never change under the
 # URL that respondents' browsers fetch. Set TRUE when fieldwork opens: the

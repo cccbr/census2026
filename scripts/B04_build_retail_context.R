@@ -28,8 +28,7 @@
 source(here::here("scripts", "00_setup.R"))
 library(sf)
 
-FRAME_SNAPSHOT  <- "dove_2026-09-19"
-CDRC_SNAPSHOT   <- "cdrc_retail_2026-10-11"
+# FRAME_SNAPSHOT and CDRC_SNAPSHOT are in config/snapshots.R.
 CDRC_FILE       <- "retailcentre_bounds_uk.parquet"
 
 RETAIL_TIERS <- c("Regional Centre" = 1, "Major Town Centre" = 2,

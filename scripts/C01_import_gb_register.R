@@ -29,7 +29,8 @@
 
 source(here::here("scripts", "00_setup.R"))
 
-FRAME_SNAPSHOT <- "dove_2026-09-19"
+# FRAME_SNAPSHOT is in config/snapshots.R. The register's own snapshot is
+# below, in RECEIVED, because it describes one file as received.
 
 # ---- the file as received ----------------------------------------------------
 RECEIVED <- list(

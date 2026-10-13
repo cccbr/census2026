@@ -13,7 +13,7 @@
 
 source(here::here("scripts", "00_setup.R"))
 
-SNAPSHOT_ID <- "dove_2026-09-19"          # <- change deliberately, never silently
+SNAPSHOT_ID <- FRAME_SNAPSHOT             # config/snapshots.R
 
 frame <- arrow::read_parquet(
   here::here("data", "curated", paste0("frame_", SNAPSHOT_ID, ".parquet"))

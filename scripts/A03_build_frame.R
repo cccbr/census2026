@@ -16,7 +16,7 @@ source(here::here("scripts", "00_setup.R"))
 
 # ---- choose the snapshot ----------------------------------------------------
 
-SNAPSHOT_ID <- "dove_2026-09-19"          # <- change deliberately, never silently
+SNAPSHOT_ID <- FRAME_SNAPSHOT             # config/snapshots.R
 
 # D-019: international countries in the frame are those with a volunteer
 # present. The list is committed reference data with an owner, not a vector
