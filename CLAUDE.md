@@ -109,7 +109,9 @@ scripts/      The data pipeline, interactive-friendly. All side effects
 questionnaire/  The survey instrument: widget sources (src/), notes, and
               the scripts that publish the tower list and build the paste
               versions of the widgets.
-settlement-map/ The volunteers' map: template and publishing script.
+apps/         Pages published for people to look at, one folder each
+              (apps/settlement-map/): template plus publishing script,
+              writing to docs/<name>/.
 analysis/     Quarto sub-project — the analytical narrative.
 reports/      Quarto sub-project — parameterised, one render per association.
 docs/         What GitHub Pages serves. Generated, committed, never edited.

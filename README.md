@@ -47,7 +47,7 @@ A01 fetch Dove -> A02 profile -> A03 frame --+--> B01 locations --+--> B02 fetch
                                              |                                                             v
                                              |                                              B05 tower classes
                                              |                                                             v
-                                             |                                     settlement-map/, the sample draw
+                                             |                                apps/settlement-map/, the sample draw
                                              +--> C01 G&B register
                                              +--> questionnaire/publish_tower_list.R
 ```
@@ -89,10 +89,16 @@ its source or its input data changes.
 | --- | --- | --- |
 | `questionnaire/publish_tower_list.R` | The tower list the questionnaire's search box fetches, to `docs/` (served by GitHub Pages) | A03, when the frame changes |
 | `questionnaire/build_widgets.R` | The two QuestionPro widgets with comments stripped, to `questionnaire/paste/` (committed), so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | Any change to `questionnaire/src/` |
-| `settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B05 |
+| `apps/settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B05 |
 
 The questionnaire's own notes are in `questionnaire/README.md` and
 `questionnaire/todo.md`.
+
+**Pages for people to look at live in `apps/<name>/`**: a template, a
+`publish.R`-style script, and nothing else. Each writes to `docs/<name>/`,
+which GitHub Pages serves. The questionnaire is deliberately not an app: it
+is the survey instrument, runs inside QuestionPro, and has rules of its own
+(the size limit, freezing the list for fieldwork).
 
 ### Old script names
 
@@ -110,11 +116,11 @@ use the old names, and `decisions.md` is never edited, so this table maps them.
 | `07_fetch_geography.R` | `scripts/B02_fetch_geography.R` |
 | `08_build_tower_context.R` | `scripts/B03_build_tower_context.R` |
 | `09_build_widget_paste.R` | `questionnaire/build_widgets.R` |
-| `10_export_settlement_map.R` | `settlement-map/publish_map.R` |
+| `10_export_settlement_map.R` | `apps/settlement-map/publish_map.R` |
 | `11_import_gb_register.R` | `scripts/C01_import_gb_register.R` |
 | `12_build_retail_context.R` | `scripts/B04_build_retail_context.R` |
 | `inst/questionnaire/` | `questionnaire/` (widget sources in `questionnaire/src/`) |
-| `inst/settlement_map/` | `settlement-map/` |
+| `inst/settlement_map/` | `apps/settlement-map/` |
 
 ### What the settlement measures are
 
@@ -155,10 +161,11 @@ a popup. It is for the analysis volunteers to pan around and challenge. Once
 pushed, GitHub Pages serves it at `<pages site>/settlement-map/`. It is one
 self-contained file, so it also opens straight from disk.
 
-`settlement-map/publish_map.R` builds it from the same code as the analysis chapters
-(`analysis/_common.R`), so the map always shows the current classification.
-Re-run `settlement-map/publish_map.R` after changing the classification or re-running script B03 or B04,
-then commit the page. It contains no personal data, and carries Dove's
+`apps/settlement-map/publish_map.R` builds it from the saved classification
+(`scripts/B05_build_tower_classes.R`), so the map shows exactly what the
+sample draw will use. Re-run B05 and then the map script after changing the
+thresholds in `config/choices.R` or re-running B03 or B04, then commit the
+page. It contains no personal data, and carries Dove's
 CC BY-SA attribution.
 
 ---

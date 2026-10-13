@@ -1,4 +1,4 @@
-# settlement-map/publish_map.R ----------------------------------------------
+# apps/settlement-map/publish_map.R -----------------------------------------
 #
 # Publish an interactive map of the draft settlement types, for the analysis
 # volunteers to pan around and check (Mark, 2026-10-11).
@@ -32,7 +32,7 @@ retail    <- arrow::read_parquet(cur("tower_retail"))
 known     <- readr::read_csv(here::here("data", "reference", "known_towers.csv"),
                              col_types = readr::cols(.default = "c"))
 
-TEMPLATE <- here::here("settlement-map", "map_template.html")
+TEMPLATE <- here::here("apps", "settlement-map", "map_template.html")
 OUT_DIR  <- here::here("docs", "settlement-map")
 MAX_BYTES <- 1048576   # the pre-commit hook blocks files over 1 MiB
 

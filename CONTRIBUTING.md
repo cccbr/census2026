@@ -37,7 +37,7 @@ the Association; who may hold them is still being settled (Q-025).
 3. **Pull often** (`git pull --rebase` on your branch), and run
    `renv::restore()` whenever `renv.lock` changes.
 4. **Open a pull request.** Mark reviews anything that touches `config/`,
-   `provenance/`, `questionnaire/`, `docs/`, `settlement-map/` or
+   `provenance/`, `questionnaire/`, `docs/`, `apps/` or
    `CLAUDE.md`.
 
 ## Rules that prevent most conflicts
@@ -50,6 +50,7 @@ the Association; who may hold them is still being settled (Q-025).
 | Adding a package | One package change per pull request, with `renv::snapshot()`. Say why in the description |
 | Generated files (`docs/`, `questionnaire/paste/`) | Regenerate them in the same pull request as the change that causes them. If two branches conflict on one, re-run its script; never merge it by hand |
 | Adding a pipeline step | Take the next free number in its stage (A: Dove and the frame, B: settlement context, C: association registers). Never renumber |
+| Adding a page for people to look at | A new folder `apps/<name>/` with its template and publishing script, writing to `docs/<name>/` |
 | `CLAUDE.md` | Stable conventions only. Progress notes go in `STATUS.md` |
 
 ## Never

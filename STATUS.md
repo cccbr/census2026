@@ -60,3 +60,9 @@ Still outstanding:
   three copies (both widgets and `R/text.R`) that must change together.
   Platform behaviour learned the hard way is in `questionnaire/README.md`;
   read it before changing either widget.
+- **Before the first outside contributor's first pull request:** turn on
+  branch protection for `main` (require a pull request; require the
+  "Repository checks" status check; approvals 0 until a second reviewer
+  exists, because GitHub does not let anyone approve their own pull
+  request), and add `.github/CODEOWNERS` with Mark's GitHub username.
+  Until then Mark commits straight to `main`.
