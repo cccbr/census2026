@@ -99,7 +99,7 @@ but none affects any other tower's type. Click a dot for the
     <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.
     This page contains no personal data.</p>
     <p>Map by Mark Ainsworth, <a href="mailto:mark@ainsworld.org.uk">mark@ainsworld.org.uk</a>,
-    for the CCCBR Census 2026. Corrections and comments welcome.</p>
+    for the Central Council's Ringing Census 2026. Corrections and comments welcome.</p>
     <p id="gen"></p>
   </details>
   </div>
@@ -194,7 +194,7 @@ but none affects any other tower's type. Click a dot for the
   // that matter most are drawn on top and stay visible.
   var order = D.rows.map(function (r, i) { return i; })
     .sort(function (a, b) {
-      return (D.rows[b][F.ur] - D.rows[a][F.ur]) || (D.rows[b][F.bells] - D.rows[a][F.bells]);
+      return (D.rows[a][F.ur] - D.rows[b][F.ur]) || (D.rows[b][F.bells] - D.rows[a][F.bells]);
     });
 
   order.forEach(function (i) {
@@ -245,13 +245,16 @@ but none affects any other tower's type. Click a dot for the
   var setGrey = function () { document.getElementById("map").classList.toggle("grey", greyBox.checked); };
   greyBox.addEventListener("change", setGrey); setGrey();
   var typeOn = D.types.map(function () { return true; });
-  // Re-add unringable before frame layers, so frame towers stay on top.
-  var sync = function (i) {
-    map.removeLayer(groups[i]); map.removeLayer(groupsUR[i]);
-    if (typeOn[i] && urBox.checked) map.addLayer(groupsUR[i]);
-    if (typeOn[i]) map.addLayer(groups[i]);
+  // Redraw every layer in order: frame towers first, unringable rings last,
+  // so the unringables (no outline) are drawn on top and never hidden.
+  var redraw = function () {
+    D.types.forEach(function (x, i) { map.removeLayer(groups[i]); map.removeLayer(groupsUR[i]); });
+    D.types.forEach(function (x, i) { if (typeOn[i]) map.addLayer(groups[i]); });
+    D.types.forEach(function (x, i) { if (typeOn[i] && urBox.checked) map.addLayer(groupsUR[i]); });
   };
-  urBox.addEventListener("change", function () { D.types.forEach(function (x, i) { sync(i); }); });
+  var sync = function () { redraw(); };
+  urBox.addEventListener("change", redraw);
+  redraw();
   var legend = document.getElementById("legend");
   D.types.forEach(function (name, i) {
     var li = document.createElement("li");
