@@ -32,7 +32,7 @@ anything about behaviour.
 - **Payload size problem resolved** by D-015 — this was validation test 3.
 - **Multi picker** (D-030). m2.0 works on a real phone up to its cap of 12,
   with choosing done in a full-screen panel. Three earlier layouts failed on
-  the phone; why is in `tower-autocomplete.md`, platform item 12.
+  the phone; why is in `README.md`, platform item 12.
 - **Script size limit found**: between 19,012 and 20,841 characters. Paste
   builds now come from `questionnaire/build_widgets.R`.
 - **One picker per block.** QuestionPro runs every question's Pre JS when a

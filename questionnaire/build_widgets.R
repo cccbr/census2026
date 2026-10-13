@@ -2,8 +2,8 @@
 #
 # Build the paste versions of the two QuestionPro widgets.
 #
-#   questionnaire/src/tower_autocomplete.js  ->  build/tower_autocomplete.paste.js
-#   questionnaire/src/tower_multipicker.js   ->  build/tower_multipicker.paste.js
+#   questionnaire/src/tower_autocomplete.js  ->  paste/tower_autocomplete.paste.js
+#   questionnaire/src/tower_multipicker.js   ->  paste/tower_multipicker.paste.js
 #
 # QuestionPro rejects JavaScript Logic above a limit somewhere between 19,012
 # characters (accepted) and 20,841 (rejected), found by test on 2026-10-10.
@@ -15,8 +15,10 @@
 # or URL needs a JavaScript parser - and a broken paste in QuestionPro is slow
 # to diagnose.
 #
-# build/ is gitignored. Before fieldwork, compare what is deployed in
-# QuestionPro with a fresh build from this script, not with the source.
+# paste/ is COMMITTED: it holds exactly what is pasted into QuestionPro, as
+# docs/ holds exactly what browsers fetch. Rebuild it in the same commit as
+# any change to src/, and never edit it by hand. Before fieldwork, compare
+# what is deployed in QuestionPro with paste/.
 
 source(here::here("scripts", "00_setup.R"))
 
@@ -25,7 +27,7 @@ source(here::here("scripts", "00_setup.R"))
 PASTE_LIMIT <- 19012
 
 src_dir   <- here::here("questionnaire", "src")
-build_dir <- here::here("questionnaire", "build")
+build_dir <- here::here("questionnaire", "paste")
 fs::dir_create(build_dir)
 
 widgets <- c("tower_autocomplete", "tower_multipicker")

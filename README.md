@@ -88,7 +88,7 @@ its source or its input data changes.
 | Script | Publishes | Run after |
 | --- | --- | --- |
 | `questionnaire/publish_tower_list.R` | The tower list the questionnaire's search box fetches, to `docs/` (served by GitHub Pages) | A03, when the frame changes |
-| `questionnaire/build_widgets.R` | The two QuestionPro widgets with comments stripped, so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | Any change to `questionnaire/src/` |
+| `questionnaire/build_widgets.R` | The two QuestionPro widgets with comments stripped, to `questionnaire/paste/` (committed), so they fit QuestionPro's script size limit (between 19,012 and 20,841 characters). Paste these builds, never the source | Any change to `questionnaire/src/` |
 | `settlement-map/publish_map.R` | The interactive map of draft settlement types, for volunteers to check, to `docs/settlement-map/` | B05 |
 
 The questionnaire's own notes are in `questionnaire/README.md` and

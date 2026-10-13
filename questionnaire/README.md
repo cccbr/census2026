@@ -9,7 +9,7 @@ Representative and Individual Ringer surveys:
 | Multi picker | `tower_multipicker.js` (m2.0) | Several towers: "Which towers count you as a band member?", "Where did you ring in census week?" | The same composite per tower, separated by ` \| ` |
 
 **Never paste the source files.** Paste the builds that
-`questionnaire/build_widgets.R` writes to `build/`. The source files carry
+`questionnaire/build_widgets.R` writes to `paste/` (committed). The source files carry
 the comments that explain the code, and with them they exceed QuestionPro's
 size limit (see *Platform behaviour*, item 9).
 

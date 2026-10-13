@@ -7,7 +7,7 @@
 // DO NOT PASTE THIS FILE. QuestionPro rejects JavaScript Logic over about
 // 19-20k characters (19,012 accepted, 20,841 rejected), and this commented
 // source is at the limit. Paste the build from questionnaire/build_widgets.R:
-// questionnaire/build/tower_autocomplete.paste.js.
+// questionnaire/paste/tower_autocomplete.paste.js.
 // Full notes: questionnaire/README.md
 // =============================================================================
 

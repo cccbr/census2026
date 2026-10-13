@@ -56,7 +56,7 @@ Thumbs.db
 .positron/
 *.bak
 
-# Generated questionnaire payload ---------------------------------------------
-# 300KB+ of generated data, rebuilt by questionnaire/publish_tower_list.R
-# from the template and the curated frame. The template IS committed.
+# Old questionnaire development files (pre-D-015 embedded lists, size probes).
+# Local only and safe to delete. The paste builds are in questionnaire/paste/,
+# which IS committed.
 questionnaire/build/

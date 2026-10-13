@@ -3,7 +3,7 @@
 //
 // DO NOT PASTE THIS FILE. QuestionPro rejects JavaScript Logic over about
 // 19-20k characters, and this commented source is larger. Paste the build
-// from questionnaire/build_widgets.R: questionnaire/build/
+// from questionnaire/build_widgets.R: questionnaire/paste/
 // tower_multipicker.paste.js. Full notes: questionnaire/README.md
 //
 // Lets a respondent choose SEVERAL towers. For questions such as "Which towers
