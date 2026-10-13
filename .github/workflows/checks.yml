@@ -1,0 +1,41 @@
+# Repository checks ------------------------------------------------------------
+#
+# Runs the same guard as .githooks/pre-commit on every pull request and every
+# push to main. The local hook only runs on clones that have installed it
+# (git config core.hooksPath .githooks); this check runs whatever each
+# contributor's machine is set up to do. It blocks large files, anything under
+# data/ except data/reference/, and personal-data-shaped columns in data files.
+
+name: Repository checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run the pre-commit guard over everything this change adds or modifies
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "No earlier commit to compare with; nothing to check."
+            exit 0
+          fi
+          # Stage the whole change, so the hook sees exactly what it would
+          # have seen at commit time.
+          git reset --soft "$base"
+          bash .githooks/pre-commit
